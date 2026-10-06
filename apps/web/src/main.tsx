@@ -9,7 +9,8 @@ import { Home } from "./pages/Home";
 import { InventarioDevelopment, InventarioList } from "./pages/Inventario";
 import { Login } from "./pages/Login";
 import { Planes } from "./pages/Planes";
-import { Conversacion, Prospectos } from "./pages/Prospectos";
+import { ProspectoFicha } from "./pages/ProspectoFicha";
+import { Prospectos } from "./pages/Prospectos";
 import { Simulador } from "./pages/Simulador";
 import { SessionProvider, useSession } from "./lib/session";
 import "./styles/app.css";
@@ -63,7 +64,7 @@ const router = createBrowserRouter([
       { path: "inventario/:dev", element: <InventarioDevelopment /> },
       { path: "planes", element: <Planes /> },
       { path: "prospectos", element: <Prospectos /> },
-      { path: "prospectos/:conversationId", element: <Conversacion /> },
+      { path: "prospectos/:id", element: <ProspectoFicha /> },
       { path: "agente", element: <Simulador /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],

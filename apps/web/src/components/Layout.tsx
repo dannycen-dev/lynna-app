@@ -15,6 +15,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { useSession } from "../lib/session";
+import { NotificationBell } from "./NotificationBell";
 
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; soon?: boolean };
 
@@ -112,6 +113,7 @@ export function Layout() {
             </span>
           </span>
         )}
+        <NotificationBell />
         <button className="navbar__btn" onClick={() => void signOut()} title="Cerrar sesión">
           <LogOut size={16} />
           <span className="navbar__hide-sm">Salir</span>

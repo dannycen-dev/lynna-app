@@ -163,8 +163,45 @@ export type Prospect = {
   createdAt: number;
   conversationId: string | null;
   aiPaused: boolean | null;
+  takenByUserId: string | null;
   lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+  assignedUserId: string | null;
+  updatedAt: number;
   messageCount: number;
+};
+
+export type ProspectStage = "new" | "qualified" | "appointment" | "visited" | "negotiation" | "ready_to_buy" | "reserved" | "won" | "lost";
+
+export type ProspectNote = { id: string; body: string; createdAt: number; authorName: string | null };
+
+export type HistoryItem = {
+  id: string;
+  actor: string;
+  actorName: string;
+  entity: string;
+  action: string;
+  data: Record<string, unknown> | null;
+  createdAt: number;
+};
+
+export type ProspectDetail = {
+  prospect: Prospect & { email: string | null; interestDevelopmentId: string | null };
+  conversation: { id: string; aiPaused: boolean; takenByUserId: string | null; takenByName: string | null; takenAt: number | null; lastInboundAt: number | null } | null;
+  messages: Message[];
+  notes: ProspectNote[];
+  history: HistoryItem[];
+  lastAi: AiAudit | null;
+};
+
+export type AppNotification = {
+  id: string;
+  kind: "handoff" | "assignment" | "system";
+  title: string;
+  body: string | null;
+  prospectId: string | null;
+  createdAt: number;
+  readAt: number | null;
 };
 
 export type Message = {
@@ -175,6 +212,7 @@ export type Message = {
   type: string;
   body: string | null;
   status: string;
+  error?: string | null;
   createdAt: number;
   waTimestamp: number | null;
 };

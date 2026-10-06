@@ -9,10 +9,12 @@ import type {
   Lot,
   LotStatus,
   Media,
-  Message,
   PaymentPlan,
   Prospect,
   Simulation,
+  AppNotification,
+  ProspectDetail,
+  ProspectStage,
   SimulatorHistory,
   SimulatorTurn,
   Summary,
@@ -55,8 +57,6 @@ export const usePlans = () => useApiQuery<PaymentPlan[]>(["plans"], "/payment-pl
 export const useMedia = (dev: string | undefined) =>
   useApiQuery<Media[]>(["media", dev], dev ? `/developments/${encodeURIComponent(dev)}/media` : null);
 export const useProspects = () => useApiQuery<Prospect[]>(["prospects"], "/prospects");
-export const useMessages = (conversationId: string | undefined) =>
-  useApiQuery<Message[]>(["messages", conversationId], conversationId ? `/conversations/${encodeURIComponent(conversationId)}/messages` : null);
 
 export function useSimulation(lotId: string | undefined, planId: string | undefined, quoteDate: string) {
   const { call, tenant } = useApi();
@@ -183,5 +183,76 @@ export function useSimulatorReset() {
   return useMutation({
     mutationFn: () => call<void>("/agent/simulator", { method: "DELETE" }),
     onSuccess: () => invalidate("simulator", "prospects"),
+  });
+}
+
+// ── CRM ───────────────────────────────────────────────────────────────────────
+
+export function useProspect(id: string | undefined) {
+  const { call, tenant } = useApi();
+  return useQuery({
+    queryKey: [tenant, "prospect", id],
+    queryFn: () => call<ProspectDetail>(`/prospects/${encodeURIComponent(id!)}`),
+    enabled: Boolean(id && tenant),
+    // Mensajes nuevos del prospecto (o de la IA) sin recargar.
+    refetchInterval: 10_000,
+  });
+}
+
+export function useChangeStage() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, stage, reason }: { id: string; stage: ProspectStage; reason?: string }) =>
+      call(`/prospects/${encodeURIComponent(id)}/stage`, { method: "PATCH", body: JSON.stringify({ stage, ...(reason ? { reason } : {}) }) }),
+    onSuccess: () => invalidate("prospects", "prospect", "summary"),
+  });
+}
+
+export function useAddNote(id: string) {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (body: string) => call(`/prospects/${encodeURIComponent(id)}/notes`, { method: "POST", body: JSON.stringify({ body }) }),
+    onSuccess: () => invalidate("prospect"),
+  });
+}
+
+export function useTakeover() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ conversationId, take }: { conversationId: string; take: boolean }) =>
+      call(`/conversations/${encodeURIComponent(conversationId)}/${take ? "takeover" : "release"}`, { method: "POST" }),
+    onSuccess: () => invalidate("prospect", "prospects"),
+  });
+}
+
+export function useSendHumanMessage() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ conversationId, body }: { conversationId: string; body: string }) =>
+      call(`/conversations/${encodeURIComponent(conversationId)}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+    onSettled: () => invalidate("prospect", "prospects"),
+  });
+}
+
+export function useNotifications() {
+  const { call, tenant } = useApi();
+  return useQuery({
+    queryKey: [tenant, "notifications"],
+    queryFn: () => call<{ unread: number; items: AppNotification[] }>("/notifications"),
+    enabled: tenant !== "",
+    refetchInterval: 10_000,
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (ids?: string[]) => call("/notifications/read", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
+    onSuccess: () => invalidate("notifications"),
   });
 }

@@ -97,3 +97,26 @@ export function temperature(score: number): { label: string; tone: "sold" | "inf
   if (score >= 30) return { label: "Tibio", tone: "info" };
   return { label: "Frío", tone: "sold" };
 }
+
+/** Orden del tablero (igual al flujo de venta de Lynna). */
+export const STAGE_ORDER = ["new", "qualified", "appointment", "visited", "negotiation", "ready_to_buy", "reserved", "won", "lost"] as const;
+
+export const HISTORY_LABEL: Record<string, string> = {
+  stage_change: "Cambió la etapa",
+  handoff: "Turnó a un asesor",
+  taken_over: "Tomó la conversación",
+  returned_to_ai: "Devolvió la conversación a la IA",
+  opted_out: "El prospecto pidió no recibir mensajes",
+};
+
+/** "hace 5 min", "hace 2 h", "ayer"… */
+export function timeAgo(ms: number, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - ms) / 1000));
+  if (s < 60) return "hace un momento";
+  const m = Math.round(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? "ayer" : `hace ${d} días`;
+}

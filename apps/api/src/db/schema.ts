@@ -206,6 +206,8 @@ export const conversations = sqliteTable(
       .references(() => waAccounts.id),
     // Cuando un vendedor toma la conversación, la IA no responde.
     aiPaused: integer("ai_paused", { mode: "boolean" }).notNull().default(false),
+    takenByUserId: text("taken_by_user_id").references(() => users.id),
+    takenAt: integer("taken_at"),
     lastInboundAt: integer("last_inbound_at"),
     lastOutboundAt: integer("last_outbound_at"),
     createdAt: createdAt(),
@@ -339,4 +341,51 @@ export const aiAuditLog = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("ai_audit_conversation_idx").on(t.conversationId, t.createdAt)],
+);
+
+// Notas del equipo sobre un prospecto (no las ve el prospecto).
+export const prospectNotes = sqliteTable(
+  "prospect_notes",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    prospectId: text("prospect_id")
+      .notNull()
+      .references(() => prospects.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").references(() => users.id),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("prospect_notes_prospect_idx").on(t.prospectId, t.createdAt)],
+);
+
+// Avisos para el equipo (p. ej. "quiere comprar"). userId null = para todo el equipo de la desarrolladora.
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: text("user_id").references(() => users.id),
+    prospectId: text("prospect_id").references(() => prospects.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["handoff", "assignment", "system"] }).notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_tenant_idx").on(t.tenantId, t.createdAt)],
+);
+
+// Qué avisos leyó cada usuario (un aviso de equipo lo lee cada quien por separado).
+export const notificationReads = sqliteTable(
+  "notification_reads",
+  {
+    notificationId: text("notification_id")
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    readAt: integer("read_at").notNull(),
+  },
+  (t) => [uniqueIndex("notification_reads_uq").on(t.notificationId, t.userId)],
 );

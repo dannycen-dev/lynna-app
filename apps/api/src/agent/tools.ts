@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { CatalogError, getLot, plansForDevelopment, searchAvailableLots, simulateForLot } from "../catalog/service";
 import type { Db } from "../db/client";
-import { developments, lots, paymentPlans, prospects } from "../db/schema";
+import { developments, lots, notifications, paymentPlans, prospects } from "../db/schema";
 import { todayIn, type Breakdown } from "../financing";
 
 type PaymentPlan = typeof paymentPlans.$inferSelect;
@@ -353,13 +353,34 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
   }
 }
 
-/** Marca el traspaso a un asesor (idempotente por turno). También lo usa el runner como red de seguridad. */
+const HANDOFF_TITLE: Record<EscalationReason, string> = {
+  compra: "quiere comprar",
+  descuento: "pide un descuento",
+  legal: "pregunta un tema legal",
+  pago: "tiene un tema de pagos",
+  queja: "tiene una queja",
+  documentos: "envió documentos",
+  otro: "necesita un asesor",
+};
+
+/** Marca el traspaso a un asesor y avisa al equipo (idempotente por turno). También lo usa el runner como red de seguridad. */
 export async function escalate(ctx: ToolContext, reason: EscalationReason, detail: string): Promise<void> {
   if (ctx.escalation) return;
   ctx.escalation = { reason, detail };
   const [current] = await ctx.db.select().from(prospects).where(eq(prospects.id, ctx.prospectId));
   const now = Date.now();
+  const who = current?.name ?? current?.profileName ?? "Un prospecto";
   await ctx.db.batch([
+    ctx.db.insert(notifications).values({
+      tenantId: ctx.tenantId,
+      // Si ya tiene vendedor, el aviso es para él; si no, para todo el equipo.
+      userId: current?.assignedUserId ?? null,
+      prospectId: ctx.prospectId,
+      kind: "handoff",
+      title: `${who} ${HANDOFF_TITLE[reason]}`,
+      body: detail || null,
+      createdAt: now,
+    }),
     ctx.db
       .update(prospects)
       .set({

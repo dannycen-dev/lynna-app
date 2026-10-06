@@ -23,6 +23,7 @@ import { actorOf, authenticate, canAccessTenant, canWrite, type AuthVariables } 
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
+import { crm } from "./crm";
 import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
 // API del panel. Personas con sesión (cookie) o automatización con ADMIN_API_TOKEN.
@@ -53,8 +54,11 @@ admin.use("/tenants/:tenant/*", async (c, next) => {
   if (!tenant || !canAccessTenant(c.var.principal, tenant.id)) {
     return c.json({ error: "not_found", message: "Desarrolladora no encontrada." }, 404);
   }
-  // Vendedores: solo lectura, simulación de planes y el simulador del agente (su propia conversación).
-  const sellerAllowed = c.req.path.endsWith("/simulate") || c.req.path.endsWith("/agent/simulator");
+  // Vendedores: lectura, simulación de planes, el simulador del agente y el CRM (prospectos,
+  // conversaciones, avisos). No modifican inventario, planes ni importaciones.
+  const path = c.req.path;
+  const sellerAllowed =
+    path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications)\//.test(path);
   if (c.req.method !== "GET" && !sellerAllowed && !canWrite(c.var.principal)) {
     return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
   }
@@ -336,6 +340,10 @@ admin.get("/tenants/:tenant/prospects", async (c) => {
       createdAt: prospects.createdAt,
       conversationId: conversations.id,
       aiPaused: conversations.aiPaused,
+      takenByUserId: conversations.takenByUserId,
+      lastOutboundAt: conversations.lastOutboundAt,
+      assignedUserId: prospects.assignedUserId,
+      updatedAt: prospects.updatedAt,
       lastInboundAt: conversations.lastInboundAt,
       messageCount: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messages.conversationId} = ${conversations.id})`,
     })
@@ -356,6 +364,10 @@ admin.get("/tenants/:tenant/conversations/:conversationId/messages", async (c) =
     .limit(500);
   return c.json(rows);
 });
+
+// ── CRM ─────────────────────────────────────────────────────────────────────────
+
+admin.route("/tenants/:tenant", crm);
 
 // ── Agente de IA: simulador de WhatsApp ──────────────────────────────────────────
 

@@ -184,6 +184,53 @@ test("agente de IA: conversar en el simulador, ver herramientas y escalamiento",
   await expect(page.getByText("Escribe como lo haría un prospecto")).toBeVisible();
 });
 
+test("CRM: aviso de compra → ficha → tomar la conversación → nota → etapa → tablero", async ({ page }) => {
+  await login(page, "seller");
+
+  await test.step("el prospecto dice que quiere comprar (simulador)", async () => {
+    await sidebar(page).getByRole("link", { name: "Agente de IA" }).click();
+    await page.getByLabel("Mensaje").fill("Quiero comprar, ¿cómo lo aparto?");
+    await page.getByRole("button", { name: "Enviar" }).click();
+    await expect(page.getByText("Quiere comprar → asesor")).toBeVisible({ timeout: 15_000 });
+  });
+
+  await test.step("aparece el aviso y lleva a la ficha", async () => {
+    await page.getByRole("button", { name: /Avisos: \d+ sin leer/ }).click({ timeout: 15_000 });
+    await page.getByRole("button", { name: /Vendedor E2E quiere comprar/ }).first().click();
+    await expect(page.getByRole("heading", { name: "Vendedor E2E" })).toBeVisible();
+    await expect(page.getByText("Turnó a un asesor: Quiere comprar")).toBeVisible();
+    await expect(page.getByText("Atiende la IA")).toBeVisible();
+  });
+
+  await test.step("el vendedor toma la conversación y responde", async () => {
+    await page.getByRole("button", { name: "Tomar conversación" }).click();
+    await expect(page.getByText("Atiende tú")).toBeVisible();
+    await page.getByLabel("Respuesta del asesor").fill("Hola, soy tu asesor. ¿Te llamo en 10 minutos?");
+    await page.getByRole("button", { name: "Enviar respuesta" }).click();
+    await expect(page.getByText("Hola, soy tu asesor. ¿Te llamo en 10 minutos?")).toBeVisible();
+    await expect(page.getByText(/Asesor · .* · simulado/)).toBeVisible();
+  });
+
+  await test.step("nota y cambio de etapa", async () => {
+    await page.getByLabel("Nueva nota").fill("Quiere visitar el sábado.");
+    await page.getByRole("button", { name: "Guardar nota" }).click();
+    await expect(page.getByText("Quiere visitar el sábado.")).toBeVisible();
+    await page.getByRole("combobox", { name: "Etapa" }).selectOption("negotiation");
+    await expect(page.getByText(/Cambió la etapa: Listo para comprar → Negociación/)).toBeVisible();
+    await shot(page, "16-ficha-prospecto");
+  });
+
+  await test.step("tablero: la tarjeta está en Negociación y se puede arrastrar", async () => {
+    await sidebar(page).getByRole("link", { name: "Prospectos" }).click();
+    const negotiation = page.getByRole("region", { name: "Negociación" });
+    const card = negotiation.getByRole("article", { name: /Vendedor E2E/ });
+    await expect(card).toBeVisible();
+    await shot(page, "17-tablero");
+    await card.dragTo(page.getByRole("region", { name: "Cita agendada" }));
+    await expect(page.getByRole("region", { name: "Cita agendada" }).getByRole("article", { name: /Vendedor E2E/ })).toBeVisible();
+  });
+});
+
 test("móvil: el menú lateral se abre como cajón", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);

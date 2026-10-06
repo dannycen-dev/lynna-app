@@ -1,103 +1,248 @@
-import { ArrowLeft, MessageCircle, Users } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router";
-import { Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useMessages, useProspects } from "../lib/api";
-import { dateTime, HANDOFF_LABEL, money, num, STAGE_LABEL, temperature } from "../lib/format";
+import { Bot, Columns3, List, MessageCircle, UserRoundCheck, Users } from "lucide-react";
+import { useMemo, useState, type DragEvent } from "react";
+import { useNavigate } from "react-router";
+import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
+import { useChangeStage, useProspects } from "../lib/api";
+import { dateTime, HANDOFF_LABEL, money, num, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
+import type { Prospect, ProspectStage } from "../lib/types";
 
-function formatPhone(wa: string): string {
+export function formatPhone(wa: string): string {
   // 5219991234567 → +52 1 999 123 4567 (formato legible MX)
   const m = /^52(1?)(\d{3})(\d{3})(\d{4})$/.exec(wa);
   return m ? `+52 ${m[1] ? "1 " : ""}${m[2]} ${m[3]} ${m[4]}` : `+${wa}`;
 }
 
+export const displayName = (p: Pick<Prospect, "name" | "profileName">) => p.name ?? p.profileName ?? "Sin nombre";
+
+type View = "tablero" | "lista";
+
 export function Prospectos() {
   const prospects = useProspects();
   const navigate = useNavigate();
+  const [view, setView] = useState<View>("tablero");
 
   return (
-    <div className="page">
-      <PageHeader title="Prospectos" subtitle="Contactos que llegaron por WhatsApp (o del simulador del agente). La calificación la calcula el sistema con lo que el prospecto le contó a la IA." />
+    <div className="page" style={{ maxWidth: view === "tablero" ? "none" : undefined }}>
+      <PageHeader
+        title="Prospectos"
+        subtitle="Llegan por WhatsApp (o del simulador del agente). La calificación la calcula el sistema con lo que el prospecto le contó a la IA."
+      />
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={view === "tablero"} className={`tabs__btn${view === "tablero" ? " active" : ""}`} onClick={() => setView("tablero")}>
+          <Columns3 size={16} /> Tablero
+        </button>
+        <button role="tab" aria-selected={view === "lista"} className={`tabs__btn${view === "lista" ? " active" : ""}`} onClick={() => setView("lista")}>
+          <List size={16} /> Lista
+        </button>
+      </div>
       {prospects.isPending && <Spinner />}
       <ErrorAlert error={prospects.error} />
       {prospects.data?.length === 0 && (
         <Empty icon={<Users size={40} />} title="Aún no hay prospectos">
-          Aparecerán aquí en cuanto alguien escriba al número de WhatsApp conectado.
+          Aparecerán aquí en cuanto alguien escriba al número de WhatsApp conectado o pruebes el agente en el simulador.
         </Empty>
       )}
-      {prospects.data && prospects.data.length > 0 && (
-        <div className="card table-wrap">
-          <table className="table table--hover">
-            <thead>
-              <tr>
-                <th>Contacto</th>
-                <th>Teléfono</th>
-                <th>Calificación</th>
-                <th>Etapa</th>
-                <th className="right">Presupuesto</th>
-                <th>Asesor</th>
-                <th className="right">Mensajes</th>
-                <th>Último mensaje</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prospects.data.map((p) => (
-                <tr key={p.id} onClick={() => p.conversationId && navigate(`/prospectos/${p.conversationId}`)}>
-                  <td>
-                    <strong>{p.name ?? p.profileName ?? "Sin nombre"}</strong>
-                    {p.source === "simulator" && <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>Simulador</span>}
-                    {p.optedOutAt && <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>Baja</span>}
-                  </td>
-                  <td className="num">{p.source === "simulator" ? "—" : formatPhone(p.phone)}</td>
-                  <td>
-                    <span className={`badge badge--${temperature(p.score).tone}`}>{temperature(p.score).label}</span>
-                  </td>
-                  <td>{STAGE_LABEL[p.stage] ?? p.stage}</td>
-                  <td className="right num">{p.budgetCents ? money(p.budgetCents) : "—"}</td>
-                  <td>{p.handoffReason ? <span className="badge badge--reserved">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span> : ""}</td>
-                  <td className="right num">{num(p.messageCount)}</td>
-                  <td className="num muted">{p.lastInboundAt ? dateTime(p.lastInboundAt) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {prospects.data && prospects.data.length > 0 && (view === "tablero" ? <Board prospects={prospects.data} /> : <ProspectTable prospects={prospects.data} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
     </div>
   );
 }
 
-export function Conversacion() {
-  const { conversationId } = useParams();
-  const prospects = useProspects();
-  const messages = useMessages(conversationId);
-  const prospect = prospects.data?.find((p) => p.conversationId === conversationId);
+function Board({ prospects }: { prospects: Prospect[] }) {
+  const navigate = useNavigate();
+  const changeStage = useChangeStage();
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<ProspectStage | null>(null);
+  const [losing, setLosing] = useState<Prospect | null>(null);
+  const [reason, setReason] = useState("");
+
+  const columns = useMemo(() => {
+    const byStage = new Map<ProspectStage, Prospect[]>(STAGE_ORDER.map((s) => [s, []]));
+    for (const p of prospects) byStage.get(p.stage as ProspectStage)?.push(p);
+    for (const list of byStage.values()) list.sort((a, b) => (b.lastInboundAt ?? b.updatedAt) - (a.lastInboundAt ?? a.updatedAt));
+    return byStage;
+  }, [prospects]);
+
+  const move = (prospect: Prospect, stage: ProspectStage) => {
+    if (prospect.stage === stage) return;
+    if (stage === "lost") {
+      setLosing(prospect);
+      setReason("");
+      return;
+    }
+    changeStage.mutate({ id: prospect.id, stage });
+  };
+
+  const onDrop = (e: DragEvent, stage: ProspectStage) => {
+    e.preventDefault();
+    setOver(null);
+    const prospect = prospects.find((p) => p.id === e.dataTransfer.getData("text/plain"));
+    if (prospect) move(prospect, stage);
+  };
 
   return (
-    <div className="page" style={{ maxWidth: 860 }}>
-      <Link to="/prospectos" className="backlink">
-        <ArrowLeft size={16} /> Prospectos
-      </Link>
-      <PageHeader
-        title={prospect ? (prospect.name ?? prospect.profileName ?? "Sin nombre") : "Conversación"}
-        subtitle={prospect ? formatPhone(prospect.phone) : undefined}
-      />
-      {messages.isPending && <Spinner />}
-      <ErrorAlert error={messages.error} />
-      {messages.data && (
-        <div className="chat">
-          {messages.data.length === 0 && <Empty icon={<MessageCircle size={40} />} title="Sin mensajes" />}
-          {messages.data.map((m) => (
-            <div key={m.id} className={`bubble bubble--${m.direction}`}>
-              {m.body ?? <em className="muted">[{m.type}]</em>}
-              <span className="bubble__meta">
-                {m.direction === "out" && `${m.author === "ai" ? "IA" : m.author === "user" ? "Asesor" : "Sistema"} · `}
-                {dateTime(m.waTimestamp ?? m.createdAt)}
-                {m.direction === "out" && ` · ${m.status}`}
-              </span>
-            </div>
-          ))}
+    <>
+      <ErrorAlert error={changeStage.error} />
+      <div className="board" aria-label="Tablero de prospectos">
+        {STAGE_ORDER.map((stage) => {
+          const items = columns.get(stage) ?? [];
+          return (
+            <section
+              key={stage}
+              className={`board__col${over === stage ? " board__col--over" : ""}`}
+              aria-label={STAGE_LABEL[stage]}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOver(stage);
+              }}
+              onDragLeave={() => setOver((s) => (s === stage ? null : s))}
+              onDrop={(e) => onDrop(e, stage)}
+            >
+              <header className="board__col-header">
+                <span>{STAGE_LABEL[stage]}</span>
+                <span className="board__count">{items.length}</span>
+              </header>
+              <div className="board__cards">
+                {items.map((p) => {
+                  const t = temperature(p.score);
+                  return (
+                    <article
+                      key={p.id}
+                      className={`board__card card${dragging === p.id ? " board__card--dragging" : ""}`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", p.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragging(p.id);
+                      }}
+                      onDragEnd={() => setDragging(null)}
+                      onClick={() => navigate(`/prospectos/${p.id}`)}
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === "Enter" && navigate(`/prospectos/${p.id}`)}
+                      aria-label={`${displayName(p)}, ${t.label}`}
+                    >
+                      <div className="row" style={{ justifyContent: "space-between", gap: 6 }}>
+                        <strong className="board__name">{displayName(p)}</strong>
+                        <span className={`badge badge--${t.tone}`}>{t.label}</span>
+                      </div>
+                      {p.budgetCents && <div className="muted num">Presupuesto {money(p.budgetCents)}</div>}
+                      <div className="row" style={{ gap: 4 }}>
+                        {p.handoffReason && <span className="badge badge--reserved badge--plain">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span>}
+                        {p.aiPaused ? (
+                          <span className="badge badge--info badge--plain">
+                            <UserRoundCheck size={12} /> Asesor
+                          </span>
+                        ) : (
+                          p.conversationId && (
+                            <span className="badge badge--sold badge--plain">
+                              <Bot size={12} /> IA
+                            </span>
+                          )
+                        )}
+                        {p.source === "simulator" && <span className="badge badge--sold badge--plain">Simulador</span>}
+                      </div>
+                      <div className="muted board__meta">
+                        <MessageCircle size={12} /> {num(p.messageCount)} · {p.lastInboundAt ? timeAgo(p.lastInboundAt) : "sin mensajes"}
+                      </div>
+                      {/* Alternativa al arrastre (teclado / móvil). */}
+                      <label className="sr-only" htmlFor={`stage-${p.id}`}>
+                        Mover a
+                      </label>
+                      <select
+                        id={`stage-${p.id}`}
+                        className="board__move"
+                        value={p.stage}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => move(p, e.target.value as ProspectStage)}
+                      >
+                        {STAGE_ORDER.map((s) => (
+                          <option key={s} value={s}>
+                            {STAGE_LABEL[s]}
+                          </option>
+                        ))}
+                      </select>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <Dialog
+        open={losing !== null}
+        onClose={() => setLosing(null)}
+        title={`Marcar como perdido${losing ? `: ${displayName(losing)}` : ""}`}
+        footer={
+          <>
+            <button className="btn" onClick={() => setLosing(null)}>
+              Cancelar
+            </button>
+            <button
+              className="btn btn--primary"
+              disabled={reason.trim().length < 3 || changeStage.isPending}
+              onClick={() => losing && changeStage.mutate({ id: losing.id, stage: "lost", reason: reason.trim() }, { onSuccess: () => setLosing(null) })}
+            >
+              Marcar como perdido
+            </button>
+          </>
+        }
+      >
+        <div className="field">
+          <label htmlFor="lost-reason">¿Por qué se perdió?</label>
+          <textarea id="lost-reason" className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej. Compró en otro desarrollo" />
+          <span className="field__hint">Ayuda a entender por qué no se cierran ventas.</span>
         </div>
-      )}
+      </Dialog>
+    </>
+  );
+}
+
+function ProspectTable({ prospects, onOpen }: { prospects: Prospect[]; onOpen: (p: Prospect) => void }) {
+  return (
+    <div className="card table-wrap">
+      <table className="table table--hover">
+        <thead>
+          <tr>
+            <th>Contacto</th>
+            <th>Teléfono</th>
+            <th>Calificación</th>
+            <th>Etapa</th>
+            <th className="right">Presupuesto</th>
+            <th>Asesor</th>
+            <th className="right">Mensajes</th>
+            <th>Último mensaje</th>
+          </tr>
+        </thead>
+        <tbody>
+          {prospects.map((p) => (
+            <tr key={p.id} onClick={() => onOpen(p)}>
+              <td>
+                <strong>{displayName(p)}</strong>
+                {p.source === "simulator" && (
+                  <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>
+                    Simulador
+                  </span>
+                )}
+                {p.optedOutAt && (
+                  <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>
+                    Baja
+                  </span>
+                )}
+              </td>
+              <td className="num">{p.source === "simulator" ? "—" : formatPhone(p.phone)}</td>
+              <td>
+                <span className={`badge badge--${temperature(p.score).tone}`}>{temperature(p.score).label}</span>
+              </td>
+              <td>{STAGE_LABEL[p.stage] ?? p.stage}</td>
+              <td className="right num">{p.budgetCents ? money(p.budgetCents) : "—"}</td>
+              <td>{p.handoffReason ? <span className="badge badge--reserved">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span> : ""}</td>
+              <td className="right num">{num(p.messageCount)}</td>
+              <td className="num muted">{p.lastInboundAt ? dateTime(p.lastInboundAt) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
