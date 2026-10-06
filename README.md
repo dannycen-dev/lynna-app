@@ -50,7 +50,7 @@ pnpm user:create --email ana@cliente.mx --name "Ana" --role manager --tenant dem
 Si no pasas `--password`, se genera una y se muestra **una sola vez**. Volver a correrlo con el mismo correo
 cambia la contraseña y cierra sus sesiones.
 
-Usuarios ficticios de demo (uno por rol, desarrolladora `demo`, contraseña `LynnaDemo2026!`) — ya creados en **stg**:
+Usuarios ficticios de demo (uno por rol, desarrolladora `demo`, contraseña `LynnaDemo2026!`) — ya creados en **dev** y **stg**:
 `pnpm demo:users --target local|dev|stg` (se niega a correr en prod).
 
 | Correo | Rol |
