@@ -49,8 +49,15 @@ SELECT
   NULL, 1759708800000
 FROM base;
 
--- Planes (montos en centavos, porcentajes en puntos base).
-INSERT INTO payment_plans (id, tenant_id, development_id, name, reservation_cents, down_payment_bp, months, annual_interest_bp, on_delivery_bp, active) VALUES
-  ('plan-contado', 'tnt-demo', NULL,            'Contado',                    1000000, 10000,  0,    0,    0, 1),
-  ('plan-12msi',   'tnt-demo', 'dev-almendros', '12 meses sin intereses',     1000000,  2000, 12,    0,    0, 1),
-  ('plan-36',      'tnt-demo', 'dev-almendros', '36 meses (12 % anual)',      1000000,  1500, 36, 1200, 1000, 1);
+-- Planes (montos en centavos, porcentajes en puntos base: 1 % = 100).
+INSERT INTO payment_plans (id, tenant_id, development_id, name, calculation_type, discount_bp, reservation_cents,
+                           down_payment_bp, down_payment_installments, months, annual_interest_bp,
+                           monthly_bp, on_delivery_bp, on_delivery_installments, rounding_absorber, delivery_date, active) VALUES
+  -- Pago único con 10 % de descuento.
+  ('plan-contado',  'tnt-demo', NULL,            'Contado (10 % de descuento)', 'on_delivery',   1000,       0, 10000, 1,  0,    0,    0,    0, 1, NULL,          NULL,         1),
+  -- 20 % de enganche y 80 % en 12 mensualidades sin intereses.
+  ('plan-12msi',    'tnt-demo', 'dev-almendros', '12 meses sin intereses',      'on_delivery',      0, 1000000,  2000, 1, 12,    0, 8000,    0, 1, 'monthly',     NULL,         1),
+  -- 15 % de enganche y 36 mensualidades con 12 % anual (amortización francesa).
+  ('plan-36',       'tnt-demo', 'dev-almendros', '36 meses (12 % anual)',       'with_interest',    0, 1000000,  1500, 1, 36, 1200,    0,    0, 1, NULL,          NULL,         1),
+  -- Preventa: 30 % de enganche en 2 pagos, 50 % en 18 mensualidades y 20 % contra entrega.
+  ('plan-preventa', 'tnt-demo', 'dev-almendros', 'Preventa 30/50/20',           'on_delivery',    500, 1000000,  3000, 2, 18,    0, 5000, 2000, 1, 'on_delivery', '2028-06-30', 1);

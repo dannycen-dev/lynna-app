@@ -27,7 +27,7 @@
 
   // Fuente de verdad de los secretos (tipos y aviso en local si falta alguno). Valores en .dev.vars / wrangler secret.
   "secrets": {
-    "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN"]
+    "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
   },
 
   "d1_databases": [
@@ -60,6 +60,9 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ConversationDO"] }],
 
+  // Libera apartados vencidos (lots.reserved_until).
+  "triggers": { "crons": ["*/15 * * * *"] },
+
   "env": {
     "dev": {
       "name": "lynna-api-dev",
@@ -71,7 +74,7 @@
         "AUTO_REPLY_MODE": "off"
       },
       "secrets": {
-        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN"]
+        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
       "d1_databases": [
         {
@@ -96,7 +99,8 @@
       },
       "durable_objects": {
         "bindings": [{ "name": "CONVERSATION", "class_name": "ConversationDO" }]
-      }
+      },
+      "triggers": { "crons": ["*/15 * * * *"] }
     },
 
     "stg": {
@@ -109,7 +113,7 @@
         "AUTO_REPLY_MODE": "off"
       },
       "secrets": {
-        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN"]
+        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
       "d1_databases": [
         {
@@ -133,7 +137,8 @@
       },
       "durable_objects": {
         "bindings": [{ "name": "CONVERSATION", "class_name": "ConversationDO" }]
-      }
+      },
+      "triggers": { "crons": ["*/15 * * * *"] }
     },
 
     "prod": {
@@ -147,7 +152,7 @@
         "AUTO_REPLY_MODE": "off"
       },
       "secrets": {
-        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN"]
+        "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
       "d1_databases": [
         {
@@ -171,7 +176,8 @@
       },
       "durable_objects": {
         "bindings": [{ "name": "CONVERSATION", "class_name": "ConversationDO" }]
-      }
+      },
+      "triggers": { "crons": ["*/15 * * * *"] }
     }
   }
 }

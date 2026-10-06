@@ -6,3 +6,5 @@ WHATSAPP_APP_SECRET=
 WHATSAPP_VERIFY_TOKEN=
 # Token del usuario del sistema (Business Manager). Fase 0: uno global; después, cifrado por tenant.
 WHATSAPP_ACCESS_TOKEN=
+# Token para /api/admin (mínimo 32 caracteres). Provisional hasta el login de la Fase 4.
+ADMIN_API_TOKEN=

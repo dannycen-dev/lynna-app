@@ -108,18 +108,45 @@ export const lotMedia = sqliteTable("lot_media", {
   sort: integer("sort").notNull().default(0),
 });
 
-// Motor portado de realestate.payment.plan (Lynna Odoo), simplificado para el MVP.
+// Motor portado de realestate.payment.plan (Lynna Odoo). Ver src/financing/.
+// - with_interest: enganche % + amortización francesa a `months` con `annual_interest_bp`.
+// - on_delivery: enganche / mensualidades (`months` pagos) / contra entrega, cada segmento
+//   en % o monto fijo; `rounding_absorber` toma la diferencia para cuadrar al precio de venta.
+export const CALCULATION_TYPES = ["with_interest", "on_delivery"] as const;
+export const VALUE_TYPES = ["percentage", "fixed"] as const;
+export const ROUNDING_ABSORBERS = ["down_payment", "monthly", "on_delivery"] as const;
+
 export const paymentPlans = sqliteTable("payment_plans", {
   id: id(),
   tenantId: tenantId(),
   // null = aplica a todos los desarrollos del tenant
   developmentId: text("development_id").references(() => developments.id),
   name: text("name").notNull(),
+  calculationType: text("calculation_type", { enum: CALCULATION_TYPES }).notNull().default("with_interest"),
+  // list_price = precio total del lote; total_m2 = precio/m² × superficie (descuento por m²)
+  listPriceType: text("list_price_type", { enum: ["list_price", "total_m2"] }).notNull().default("list_price"),
+  discountType: text("discount_type", { enum: VALUE_TYPES }).notNull().default("percentage"),
+  discountBp: integer("discount_bp").notNull().default(0),
+  // Con list_price_type=total_m2 es descuento POR m²; si no, sobre el total.
+  discountFixedCents: integer("discount_fixed_cents").notNull().default(0),
   reservationCents: integer("reservation_cents").notNull().default(0),
+  openingFeeCents: integer("opening_fee_cents").notNull().default(0),
+  downPaymentType: text("down_payment_type", { enum: VALUE_TYPES }).notNull().default("percentage"),
   downPaymentBp: integer("down_payment_bp").notNull().default(0),
+  downPaymentFixedCents: integer("down_payment_fixed_cents").notNull().default(0),
+  downPaymentInstallments: integer("down_payment_installments").notNull().default(1),
+  // Plazo (with_interest) o número de mensualidades (on_delivery).
   months: integer("months").notNull().default(0),
   annualInterestBp: integer("annual_interest_bp").notNull().default(0),
+  monthlyType: text("monthly_type", { enum: VALUE_TYPES }).notNull().default("percentage"),
+  monthlyBp: integer("monthly_bp").notNull().default(0),
+  monthlyFixedCents: integer("monthly_fixed_cents").notNull().default(0),
+  onDeliveryType: text("on_delivery_type", { enum: VALUE_TYPES }).notNull().default("percentage"),
   onDeliveryBp: integer("on_delivery_bp").notNull().default(0),
+  onDeliveryFixedCents: integer("on_delivery_fixed_cents").notNull().default(0),
+  onDeliveryInstallments: integer("on_delivery_installments").notNull().default(1),
+  roundingAbsorber: text("rounding_absorber", { enum: ROUNDING_ABSORBERS }),
+  deliveryDate: text("delivery_date"), // YYYY-MM-DD
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 

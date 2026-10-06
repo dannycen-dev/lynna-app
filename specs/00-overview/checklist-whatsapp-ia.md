@@ -41,7 +41,7 @@
 - [x] Ningún secreto en el repo; `.dev.vars.example` documentado.
 - [x] Migraciones D1 solo vía Drizzle; nunca SQL a mano en prod.
 - [x] Logs estructurados en JSON **sin PII** (teléfono enmascarado, sin contenido de documentos).
-- [ ] Cada cambio de estado importante (lote, prospecto, cita) queda en tabla `audit_log`.
+- [ ] Cada cambio de estado importante (lote, prospecto, cita) queda en tabla `audit_log`. — _lotes, planes y media ya auditan; prospectos y citas con su fase_
 - [x] Idempotencia en todo lo que venga de Meta (dedupe por `wamid`).
 
 ---
@@ -58,22 +58,22 @@
 - **Acepta:** un mensaje entrante a las 3 a.m. recibe respuesta coherente en < 15 s.
 
 ### 2.2 Información de desarrollos y terrenos disponibles
-- [ ] Modelo de datos: `developments`, `lots` (manzana, número, m², precio/m², precio total, estado, frente/fondo, orientación, coordenadas/GeoJSON).
-- [ ] Tool de IA `buscar_lotes(desarrollo, presupuesto_max, m2_min, …)` → consulta **en vivo** a D1, solo lotes `disponible`.
+- [x] Modelo de datos: `developments`, `lots` (manzana, número, m², precio/m², precio total, estado, frente/fondo, orientación, coordenadas/GeoJSON). — _orientación pendiente; GeoJSON en columna `geojson`_
+- [ ] Tool de IA `buscar_lotes(desarrollo, presupuesto_max, m2_min, …)` → consulta **en vivo** a D1, solo lotes `disponible`. — _lógica lista en `catalog/service.ts` (`searchAvailableLots`); la tool se conecta en Fase 3_
 - [ ] Tool `info_desarrollo(id)` → amenidades, ubicación, servicios, etapa.
 - [ ] Base de conocimiento (FAQ, reglamento, proceso de compra) indexada en **Vectorize** para preguntas abiertas.
 - **Acepta:** la IA nunca menciona un lote que no venga del resultado de una tool.
 
 ### 2.3 Envío de precios, medidas, ubicación, fotos, planos y características
-- [ ] Fotos y planos en **R2** asociados a desarrollo/lote; carga desde el panel.
+- [ ] Fotos y planos en **R2** asociados a desarrollo/lote; carga desde el panel. — _subida/servido listos y probados en local; falta activar R2 en la cuenta de Ignia_
 - [ ] Envío por Cloud API: `image`, `document` (PDF del plano), `location` (lat/lng del desarrollo).
 - [ ] Ficha de lote generada desde datos reales (precio y medidas salen de la BD, no del modelo).
 - [ ] Opcional fase 2: PDF de cotización con Browser Rendering.
 - **Acepta:** al pedir "mándame el plano" llega el PDF correcto del desarrollo consultado.
 
 ### 2.4 Enganche, mensualidades y formas de pago
-- [ ] Portar el **motor de planes de pago** de Lynna (`payment_plan`: apartado, enganche %, meses, interés, contra entrega) a una librería TS pura y testeada.
-- [ ] Tool `simular_plan(lote_id, plan_id)` → tabla de pagos calculada por código, nunca por el LLM.
+- [x] Portar el **motor de planes de pago** de Lynna (`payment_plan`: apartado, enganche %, meses, interés, contra entrega) a una librería TS pura y testeada. — _`src/financing/`: `with_interest` y `on_delivery`, descuentos por total o por m²_
+- [ ] Tool `simular_plan(lote_id, plan_id)` → tabla de pagos calculada por código, nunca por el LLM. — _lógica lista (`simulateForLot`, solo lotes disponibles); la tool se conecta en Fase 3_
 - [ ] Toda simulación lleva la leyenda "cotización informativa, sujeta a confirmación por un asesor".
 - [ ] Formas de pago aceptadas configurables por desarrollo (texto informativo; **no** se cobra por WhatsApp).
 - **Acepta:** tests unitarios con los planes reales del cliente cuadran al centavo.
@@ -85,10 +85,10 @@
 - **Acepta:** el score es reproducible con los mismos datos.
 
 ### 2.6 Registro de nombre, teléfono y datos
-- [ ] Alta automática de prospecto al primer mensaje (teléfono de WhatsApp + nombre de perfil).
+- [x] Alta automática de prospecto al primer mensaje (teléfono de WhatsApp + nombre de perfil).
 - [ ] Tool `actualizar_prospecto(campos)` con lista blanca de campos (nombre, correo, ciudad, presupuesto…).
 - [ ] Consentimiento / aviso de privacidad enviado en el primer contacto (LFPDPPP).
-- [ ] Un contacto existente no se duplica: se reutiliza y se añade al historial.
+- [x] Un contacto existente no se duplica: se reutiliza y se añade al historial.
 
 ### 2.7 Seguimiento automático a prospectos que no concretaron
 - [ ] **Workflow** por prospecto: secuencia configurable (p. ej. +1 día, +3 días, +7 días) con `step.sleep`.
@@ -115,10 +115,10 @@
 - [ ] La notificación incluye resumen de la conversación, score y lote(s) de interés.
 
 ### 2.11 Control de disponibilidad de terrenos
-- [ ] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría.
+- [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _hoy vía API de administración; panel en Fase 4_
 - [ ] La IA consulta disponibilidad **en cada respuesta** que mencione un lote (sin caché en el prompt).
-- [ ] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor.
-- [ ] Importación masiva de inventario (CSV/Excel) para cargar los proyectos del cliente.
+- [ ] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor. — _cron cada 15 min ya libera y audita; falta el aviso al vendedor (Fase 4)_
+- [x] Importación masiva de inventario (CSV/Excel) para cargar los proyectos del cliente. — _CSV con encabezados en español, `dryRun`, todo o nada_
 - **Acepta:** un lote marcado `vendido` desaparece de las respuestas de la IA al instante.
 
 ### 2.12 CRM para consultar y dar seguimiento
@@ -130,7 +130,7 @@
 - [ ] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo.
 
 ### 2.13 WhatsApp Business por la API oficial
-- [ ] Cloud API de Meta (sin intermediarios no oficiales).
+- [x] Cloud API de Meta (sin intermediarios no oficiales).
 - [ ] Alta de cuenta por cliente: WABA, número, token de usuario del sistema, app secret, verify token — guardados **cifrados** (AES-GCM, llave en Secrets Store).
 - [ ] Sincronización de plantillas aprobadas desde Meta.
 - [ ] Guía de onboarding: verificación de negocio, método de pago en la WABA, migración del número existente (conservar el PIN de dos pasos).
@@ -217,7 +217,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 | Fase | Entregable | Checklist |
 |---|---|---|
 | **0. Base** ✅ | Monorepo, Worker Hono, D1/Drizzle, webhook WhatsApp, CI con tests (auth → Fase 4) | §1 |
-| **1. Inventario** | Desarrollos, lotes, media en R2, planes de pago, importación CSV | §2.2, §2.4, §2.11 |
+| **1. Inventario** ✅ | Desarrollos, lotes, media en R2, motor de planes de pago, importación CSV, E2E con Playwright | §2.2, §2.4, §2.11 |
 | **2. WhatsApp** | Webhook, cola, DO, envío de medios, túnel local | §2.1, §2.3, §2.13 |
 | **3. Agente IA** | Tools, guardrails, validador, evals | §2.5, §2.6, §3 |
 | **4. CRM** | Pipeline, bandeja, toma de control, asignación, notificaciones | §2.9, §2.10, §2.12 |

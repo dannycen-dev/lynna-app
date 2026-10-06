@@ -1,6 +1,9 @@
 import { Hono } from "hono";
+import { releaseExpiredReservations } from "./catalog/service";
+import { getDb } from "./db/client";
 import { log } from "./lib/log";
-import { devCatalog } from "./routes/dev-catalog";
+import { admin } from "./routes/admin";
+import { publicMedia } from "./routes/media";
 import type { InboundEvent } from "./whatsapp/payload";
 import { handleInboundBatch } from "./whatsapp/inbound";
 import { whatsappWebhook } from "./whatsapp/webhook";
@@ -11,7 +14,8 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get("/health", (c) => c.json({ ok: true, env: c.env.ENVIRONMENT }));
 app.route("/whatsapp", whatsappWebhook);
-app.route("/api/dev", devCatalog);
+app.route("/media", publicMedia);
+app.route("/api/admin", admin);
 
 app.onError((err, c) => {
   log("error", "http.unhandled", { path: c.req.path, error: err.message });
@@ -20,7 +24,13 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
+
   async queue(batch, env) {
     await handleInboundBatch(batch, env);
+  },
+
+  async scheduled(_controller, env) {
+    const released = await releaseExpiredReservations(getDb(env.DB));
+    if (released.length > 0) log("info", "cron.reservations_released", { count: released.length });
   },
 } satisfies ExportedHandler<Env, InboundEvent>;
