@@ -14,9 +14,13 @@ apps/api/                  Worker (Hono) — webhook WhatsApp, cola, Durable Obj
   src/db/schema.ts         Esquema D1 (Drizzle) — fuente de verdad del modelo de datos
   src/whatsapp/            Webhook, firma de Meta, payload, cliente Cloud API, consumidor de cola
   src/conversation/        ConversationDO — una instancia por conversación (debounce, IA en Fase 3)
+  src/financing/           Motor de planes de pago (puro, en centavos) portado de Lynna Odoo
+  src/catalog/             Reglas de inventario: búsqueda, simulación, estados, importación CSV
+  src/routes/admin.ts      API de administración (/api/admin, token provisional hasta la Fase 4)
   migrations/              Migraciones generadas por drizzle-kit (no editar a mano)
   seed/demo.sql            Desarrollo ficticio "Residencial Los Almendros" (40 lotes, 3 planes)
   scripts/                 Herramientas locales (simular mensajes entrantes)
+apps/e2e/                  Pruebas end-to-end con Playwright (API hoy; panel en Fase 4)
 specs/                     Specs del producto
 ```
 
@@ -36,11 +40,34 @@ Comprobar:
 
 ```bash
 curl localhost:8787/health
-curl 'localhost:8787/api/dev/tenants/demo/developments/los-almendros?status=available'
+T=$(grep ADMIN_API_TOKEN apps/api/.dev.vars | cut -d= -f2-)
+curl -H "authorization: Bearer $T" 'localhost:8787/api/admin/tenants/demo/developments/los-almendros/lots?status=available'
 pnpm --filter @lynna/api simulate "Hola, ¿qué lotes tienen?"   # mensaje firmado como Meta
 ```
 
-`/api/dev/*` solo existe con `ENVIRONMENT=local` (sin auth hasta la Fase 4).
+## API de administración
+
+Todas las rutas van bajo `/api/admin/tenants/<tenant>` con `Authorization: Bearer <ADMIN_API_TOKEN>`
+(provisional hasta el login de la Fase 4). Cada cambio queda en `audit_log`.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET/POST /developments`, `PATCH /developments/:slug` | Desarrollos |
+| `GET /developments/:slug/lots?status=` | Lotes (filtrables por estado) |
+| `POST /developments/:slug/lots/import?dryRun=true` | Importa CSV (cuerpo = CSV). Todo o nada; errores por renglón |
+| `PATCH /lots/:id/status` | `{status, reason, reservedUntil?}` — apartar exige vencimiento futuro |
+| `GET/POST /payment-plans`, `PATCH /payment-plans/:id` | Planes (no se editan: solo `active`) |
+| `GET /developments/:slug/payment-plans` | Planes que aplican a un desarrollo |
+| `POST /simulate` | `{lotId, planId, quoteDate?}` → desglose y tabla de pagos (solo lotes disponibles) |
+| `GET/POST /developments/:slug/media?kind=photo\|plan\|brochure` | Fotos/planos a R2 (cuerpo = archivo; JPG, PNG, WebP o PDF ≤ 15 MB) |
+| `DELETE /media/:id` | Borra de R2 y de D1 |
+| `GET /prospects`, `GET /conversations/:id/messages` | Prospectos y mensajes de WhatsApp |
+
+Público: `GET /media/:id` sirve el archivo (con ETag). Cron cada 15 min: libera apartados vencidos.
+
+CSV de lotes — columnas (acepta `,` o `;` y encabezados en español):
+`manzana, lote, superficie_m2, precio_m2` (obligatorias) y `frente_m, fondo_m, precio_total, estado, caracteristicas`.
+`estado`: disponible / apartado / vendido / bloqueado. Si falta `precio_total` se calcula.
 
 ## Conectar un número real de WhatsApp (local)
 
@@ -64,7 +91,9 @@ La URL del túnel rápido cambia en cada arranque; hay que actualizarla en Meta.
 | Comando | Qué hace |
 |---|---|
 | `pnpm dev` | Worker local con D1, R2, Queues y DO simulados |
-| `pnpm test` | Vitest dentro del runtime de Workers |
+| `pnpm test` | Vitest dentro del runtime de Workers (unitarias e integración) |
+| `pnpm e2e` | Playwright: levanta `wrangler dev` con estado limpio + seed y prueba los flujos por HTTP |
+| `E2E_BASE_URL=https://… pnpm e2e:smoke` | Solo pruebas `@smoke` (lectura) contra un entorno desplegado |
 | `pnpm typecheck` | TypeScript estricto |
 | `pnpm db:generate` | Genera migración tras cambiar `schema.ts` |
 | `pnpm db:migrate` / `pnpm db:seed` | Migraciones y seed en local |
@@ -92,8 +121,8 @@ Cada entorno tiene sus propias colas (`lynna-wa-inbound-<env>` + DLQ), D1 y secr
 
 ### Flujo de trabajo
 
-1. Rama corta desde `main` → PR. El pipeline corre tipos, typecheck y pruebas.
-2. Merge a `main` → migraciones + deploy a **dev** + health check.
+1. Rama corta desde `main` → PR. El pipeline corre tipos, typecheck, pruebas y **E2E con Playwright**.
+2. Merge a `main` → migraciones + deploy a **dev** + health check + **smoke E2E** contra dev.
 3. Release: `git tag v0.1.0 && git push origin v0.1.0` → **stg**; al aprobar el environment `prod` en GitHub → **prod**.
 4. Las migraciones corren **antes** del deploy: deben ser compatibles con el código anterior
    (agregar columnas/tablas primero; borrar o renombrar en un release posterior).

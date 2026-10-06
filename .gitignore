@@ -8,3 +8,5 @@ dist/
 .DS_Store
 coverage/
 worker-configuration.d.ts.bak
+test-results/
+playwright-report/

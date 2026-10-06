@@ -2,13 +2,17 @@
   "name": "lynna",
   "private": true,
   "packageManager": "pnpm@11.24.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --filter @lynna/api dev",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @lynna/api db:generate",
     "db:migrate": "pnpm --filter @lynna/api db:migrate:local",
-    "db:seed": "pnpm --filter @lynna/api db:seed:local"
+    "db:seed": "pnpm --filter @lynna/api db:seed:local",
+    "e2e": "pnpm --filter @lynna/e2e e2e",
+    "e2e:smoke": "pnpm --filter @lynna/e2e e2e:smoke"
   }
 }

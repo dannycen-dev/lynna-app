@@ -50,3 +50,14 @@ jobs:
           done
           echo "::error::El health check de ${{ inputs.environment }} no respondió como se esperaba."
           exit 1
+      - name: Smoke E2E (Playwright, solo lectura)
+        env:
+          E2E_BASE_URL: https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev
+          E2E_EXPECT_ENV: ${{ inputs.environment }}
+        run: pnpm e2e:smoke
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-smoke-${{ inputs.environment }}
+          path: apps/e2e/playwright-report
+          retention-days: 7
