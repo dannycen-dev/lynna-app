@@ -15,6 +15,12 @@ rm -rf "$STATE"
 pnpm exec wrangler d1 migrations apply DB --local --persist-to "$STATE" >/dev/null
 pnpm exec wrangler d1 execute DB --local --persist-to "$STATE" --file=seed/demo.sql >/dev/null
 
+# Usuarios de prueba (mismas credenciales que apps/e2e/lib/env.ts → USERS).
+user() { node scripts/create-user.mjs --persist-to "$STATE" "$@" >/dev/null; }
+user --email gerente@demo.lynna.mx --name "Gerente E2E" --role manager --tenant demo --password "Gerente-E2E-2026"
+user --email vendedor@demo.lynna.mx --name "Vendedor E2E" --role seller --tenant demo --password "Vendedor-E2E-2026"
+user --email ops@igniastudio.mx --name "Ops Ignia" --role admin --password "Admin-E2E-2026!"
+
 exec pnpm exec wrangler dev \
   --port "${E2E_PORT:-8788}" \
   --inspector-port 0 \

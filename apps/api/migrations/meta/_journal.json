@@ -15,6 +15,13 @@
       "when": 1791307819712,
       "tag": "0001_payment_plan_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791311575056,
+      "tag": "0002_users_sessions",
+      "breakpoints": true
     }
   ]
 }

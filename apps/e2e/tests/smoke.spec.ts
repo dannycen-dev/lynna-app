@@ -22,7 +22,16 @@ test.describe("smoke @smoke", () => {
     expect(res.status()).toBe(403);
   });
 
-  test("la API de administración exige token", async ({ request }) => {
+  test("login: credenciales incorrectas responden 401 genérico", async ({ request, baseURL }) => {
+    const res = await request.post("/api/auth/login", {
+      headers: { origin: new URL(baseURL!).origin },
+      data: { email: `nadie-${Date.now()}@ejemplo.mx`, password: "no-existe-123" },
+    });
+    expect(res.status()).toBe(401);
+    expect((await res.json()).message).toBe("Correo o contraseña incorrectos.");
+  });
+
+  test("la API de administración exige sesión o token", async ({ request }) => {
     expect((await request.get("/api/admin/tenants/demo/developments")).status()).toBe(401);
     const forged = await request.get("/api/admin/tenants/demo/developments", { headers: { authorization: "Bearer falso" } });
     expect(forged.status()).toBe(401);
@@ -32,7 +41,8 @@ test.describe("smoke @smoke", () => {
     await page.goto("/cotizador");
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { name: "Lynna" })).toBeVisible();
-    await expect(page.getByLabel("Clave de acceso")).toBeVisible();
+    await expect(page.getByLabel("Correo")).toBeVisible();
+    await expect(page.getByLabel("Contraseña", { exact: true })).toBeVisible();
   });
 
   test("encabezados de seguridad en la interfaz", async ({ request }) => {

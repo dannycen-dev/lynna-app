@@ -3,7 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { Layout } from "./components/Layout";
-import { Empty } from "./components/ui";
+import { Empty, Spinner } from "./components/ui";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
 import { Home } from "./pages/Home";
 import { InventarioDevelopment, InventarioList } from "./pages/Inventario";
@@ -21,13 +21,15 @@ const queryClient = new QueryClient({
 
 /** Sin sesión, todo lleva al login; con sesión, a la app. */
 function Protected() {
-  const { token } = useSession();
-  return token ? <Layout /> : <Navigate to="/login" replace />;
+  const { status } = useSession();
+  if (status === "loading") return <Spinner label="Cargando Lynna…" />;
+  return status === "signed-in" ? <Layout /> : <Navigate to="/login" replace />;
 }
 
 function LoginRoute() {
-  const { token } = useSession();
-  return token ? <Navigate to="/" replace /> : <Login />;
+  const { status } = useSession();
+  if (status === "loading") return <Spinner label="Cargando Lynna…" />;
+  return status === "signed-in" ? <Navigate to="/" replace /> : <Login />;
 }
 
 const router = createBrowserRouter([
@@ -51,10 +53,10 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <SessionProvider>
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider>
         <RouterProvider router={router} />
-      </QueryClientProvider>
-    </SessionProvider>
+      </SessionProvider>
+    </QueryClientProvider>
   </StrictMode>,
 );

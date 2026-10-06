@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import { useCreatePlan, useDevelopments, usePlans, useTogglePlan } from "../lib/api";
 import { isoDate, money, pct } from "../lib/format";
+import { useSession } from "../lib/session";
 import type { PaymentPlan } from "../lib/types";
 
 /** Descripción corta y humana del plan, como la leería un vendedor. */
@@ -28,6 +29,7 @@ export function Planes() {
   const plans = usePlans();
   const developments = useDevelopments();
   const toggle = useTogglePlan();
+  const { canWrite } = useSession();
   const [creating, setCreating] = useState(false);
 
   const devName = (id: string | null) => (id ? (developments.data?.find((d) => d.id === id)?.name ?? "—") : "Todos los desarrollos");
@@ -38,9 +40,11 @@ export function Planes() {
         title="Planes de pago"
         subtitle="Los planes no se editan para que cualquier cotización emitida se pueda reproducir: se crean nuevos y se desactivan los anteriores."
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> Nuevo plan
-          </button>
+          canWrite && (
+            <button className="btn btn--primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> Nuevo plan
+            </button>
+          )
         }
       />
       {plans.isPending && <Spinner />}
@@ -62,9 +66,11 @@ export function Planes() {
               </ul>
               <div className="row" style={{ justifyContent: "space-between", marginTop: 4 }}>
                 <span className="badge badge--info badge--plain">{p.calculationType === "with_interest" ? "Con intereses" : "Sin intereses"}</span>
-                <button className="btn btn--sm" onClick={() => toggle.mutate({ id: p.id, active: !p.active })} disabled={toggle.isPending}>
-                  {p.active ? "Desactivar" : "Activar"}
-                </button>
+                {canWrite && (
+                  <button className="btn btn--sm" onClick={() => toggle.mutate({ id: p.id, active: !p.active })} disabled={toggle.isPending}>
+                    {p.active ? "Desactivar" : "Activar"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

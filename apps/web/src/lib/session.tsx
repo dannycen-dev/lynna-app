@@ -1,60 +1,110 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { ApiError, apiFetch } from "./api-client";
+import type { Me, Tenant, UserRole } from "./types";
 
-// Sesión provisional: el token de administración vive en sessionStorage (se borra al cerrar la pestaña).
-// En la Fase 4 se reemplaza por login con usuarios (Better Auth) y cookie httpOnly.
+// La sesión vive en una cookie HttpOnly que pone la API: el JavaScript de la página nunca ve
+// el token. Aquí solo se guarda qué desarrolladora está viendo el usuario (si tiene varias).
 
-const TOKEN_KEY = "lynna.adminToken";
 const TENANT_KEY = "lynna.tenant";
+const ROLE_LABEL: Record<UserRole, string> = { admin: "Ignia", owner: "Dueño", manager: "Gerente", seller: "Vendedor" };
 
-function read(key: string): string | null {
+function readTenant(): string | null {
   try {
-    return sessionStorage.getItem(key);
+    return sessionStorage.getItem(TENANT_KEY);
   } catch {
     return null;
   }
 }
 
-function write(key: string, value: string | null) {
+function writeTenant(value: string) {
   try {
-    if (value === null) sessionStorage.removeItem(key);
-    else sessionStorage.setItem(key, value);
+    sessionStorage.setItem(TENANT_KEY, value);
   } catch {
-    // Navegación privada o almacenamiento bloqueado: la sesión dura lo que la pestaña.
+    // Almacenamiento bloqueado: la selección dura lo que la pestaña.
   }
 }
 
 type Session = {
-  token: string | null;
+  status: "loading" | "signed-in" | "signed-out";
+  me: Me | null;
   tenant: string;
-  signIn: (token: string, tenant: string) => void;
-  signOut: () => void;
-  setTenant: (tenant: string) => void;
+  tenants: Tenant[];
+  roleLabel: string;
+  /** owner, manager y admin pueden modificar inventario y planes; seller solo consulta y cotiza. */
+  canWrite: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  setTenant: (slug: string) => void;
+  expire: () => void;
 };
 
 const SessionContext = createContext<Session | null>(null);
+export const ME_KEY = ["me"] as const;
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState(() => read(TOKEN_KEY));
-  const [tenant, setTenantState] = useState(() => read(TENANT_KEY) ?? "demo");
+  const qc = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: ME_KEY,
+    queryFn: async () => {
+      try {
+        return await apiFetch<Me>("/api/auth/me");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) return null;
+        throw err;
+      }
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const [selected, setSelected] = useState(readTenant);
 
-  const signIn = useCallback((newToken: string, newTenant: string) => {
-    write(TOKEN_KEY, newToken);
-    write(TENANT_KEY, newTenant);
-    setToken(newToken);
-    setTenantState(newTenant);
+  const me = meQuery.data ?? null;
+  const tenants = me?.tenants ?? [];
+  const tenant = tenants.find((t) => t.slug === selected)?.slug ?? tenants[0]?.slug ?? "";
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const result = await apiFetch<Me>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      qc.setQueryData(ME_KEY, result);
+    },
+    [qc],
+  );
+
+  const expire = useCallback(() => {
+    // Primero la sesión (la UI regresa al login), luego se borra todo dato del negocio en caché.
+    qc.setQueryData(ME_KEY, null);
+    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== ME_KEY[0] });
+  }, [qc]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await apiFetch<void>("/api/auth/logout", { method: "POST" });
+    } finally {
+      expire();
+    }
+  }, [expire]);
+
+  const setTenant = useCallback((slug: string) => {
+    writeTenant(slug);
+    setSelected(slug);
   }, []);
 
-  const signOut = useCallback(() => {
-    write(TOKEN_KEY, null);
-    setToken(null);
-  }, []);
-
-  const setTenant = useCallback((value: string) => {
-    write(TENANT_KEY, value);
-    setTenantState(value);
-  }, []);
-
-  const value = useMemo(() => ({ token, tenant, signIn, signOut, setTenant }), [token, tenant, signIn, signOut, setTenant]);
+  const value = useMemo<Session>(
+    () => ({
+      status: meQuery.isPending ? "loading" : me ? "signed-in" : "signed-out",
+      me,
+      tenant,
+      tenants,
+      roleLabel: me ? ROLE_LABEL[me.user.role] : "",
+      canWrite: me ? me.user.role !== "seller" : false,
+      signIn,
+      signOut,
+      setTenant,
+      expire,
+    }),
+    [meQuery.isPending, me, tenant, tenants, signIn, signOut, setTenant, expire],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

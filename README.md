@@ -40,7 +40,30 @@ pnpm dev               # http://localhost:8787 → API + interfaz compilada
 pnpm dev:web           # opcional: http://localhost:5173 con recarga en caliente (proxy a la API)
 ```
 
-Entra con la clave `ADMIN_API_TOKEN` de `apps/api/.dev.vars` (acceso provisional hasta el login con usuarios).
+Para entrar crea tu usuario (no hay registro abierto):
+
+```bash
+pnpm user:create --email tu@empresa.mx --name "Tu Nombre" --role admin                 # local
+pnpm user:create --email ana@cliente.mx --name "Ana" --role manager --tenant demo --target dev
+```
+
+Si no pasas `--password`, se genera una y se muestra **una sola vez**. Volver a correrlo con el mismo correo
+cambia la contraseña y cierra sus sesiones.
+
+## Usuarios y acceso
+
+| Rol | Alcance |
+|---|---|
+| `admin` | Equipo Ignia: todas las desarrolladoras |
+| `owner`, `manager` | Su desarrolladora: inventario, planes, importación, estados |
+| `seller` | Su desarrolladora: consulta y cotiza; no modifica |
+
+- Contraseñas con PBKDF2-SHA256 (100k iteraciones, sal por usuario); se re-hashean solas si suben las iteraciones.
+- Sesión en cookie `lynna_session` `HttpOnly` + `Secure` + `SameSite=Lax`, 7 días deslizantes; en BD solo el SHA-256 del token.
+- Bloqueo de 15 min tras 5 intentos fallidos por correo; mismo mensaje para correo inexistente o contraseña mala.
+- Anti-CSRF: toda petición con cookie que modifica datos debe traer `Origin` del mismo sitio.
+- Un usuario que pide otra desarrolladora recibe 404 (no se revela que existe).
+- `ADMIN_API_TOKEN` queda solo para automatización (scripts, pruebas); la interfaz no lo usa.
 
 Comprobar:
 
@@ -53,8 +76,9 @@ pnpm --filter @lynna/api simulate "Hola, ¿qué lotes tienen?"   # mensaje firma
 
 ## API de administración
 
-Todas las rutas van bajo `/api/admin/tenants/<tenant>` con `Authorization: Bearer <ADMIN_API_TOKEN>`
-(provisional hasta el login de la Fase 4). Cada cambio queda en `audit_log`.
+Todas las rutas van bajo `/api/admin/tenants/<tenant>`, con sesión (cookie) o `Authorization: Bearer <ADMIN_API_TOKEN>`
+para automatización. Cada cambio queda en `audit_log` con el usuario que lo hizo.
+Login: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
 
 | Método y ruta | Qué hace |
 |---|---|

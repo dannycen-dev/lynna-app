@@ -4,6 +4,13 @@ export type LotStatus = "available" | "reserved" | "sold" | "blocked";
 
 export type Tenant = { id: string; name: string; slug: string };
 
+export type UserRole = "admin" | "owner" | "manager" | "seller";
+
+export type Me = {
+  user: { id: string; tenantId: string | null; email: string; name: string; role: UserRole };
+  tenants: Tenant[];
+};
+
 export type Development = {
   id: string;
   tenantId: string;

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { LOCAL_SECRETS } from "../lib/env";
+import { USERS } from "../lib/env";
 
 // Pruebas de navegador del panel. Escriben datos: solo corren en local/CI (no son @smoke).
 // SCREENSHOT_DIR=/ruta guarda capturas de cada pantalla para revisión visual.
@@ -10,28 +10,71 @@ async function shot(page: Page, name: string) {
 
 const sidebar = (page: Page) => page.getByRole("navigation", { name: "Navegación principal" });
 
-async function login(page: Page) {
+async function login(page: Page, who: keyof typeof USERS = "manager") {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel("Clave de acceso").fill(LOCAL_SECRETS.ADMIN_API_TOKEN);
+  await page.getByLabel("Correo").fill(USERS[who].email);
+  await page.getByLabel("Contraseña", { exact: true }).fill(USERS[who].password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { name: "Bienvenido a Lynna" })).toBeVisible();
 }
 
 test.describe("acceso", () => {
-  test("sin sesión redirige al login y rechaza una clave incorrecta", async ({ page }) => {
+  test("sin sesión redirige al login y rechaza una contraseña incorrecta", async ({ page }) => {
     await page.goto("/cotizador");
     await expect(page).toHaveURL(/\/login$/);
     await shot(page, "01-login");
-    await page.getByLabel("Clave de acceso").fill("clave-incorrecta");
+    await page.getByLabel("Correo").fill(USERS.manager.email);
+    await page.getByLabel("Contraseña", { exact: true }).fill("incorrecta-123");
     await page.getByRole("button", { name: "Entrar" }).click();
-    await expect(page.getByRole("alert")).toContainText("sesión no es válida");
+    await expect(page.getByRole("alert")).toContainText("Correo o contraseña incorrectos.");
+    await expect(page.getByLabel("Contraseña", { exact: true })).toHaveValue("");
   });
 
-  test("entrar y salir", async ({ page }) => {
+  test("entrar, la sesión sobrevive a recargar, y salir la cierra", async ({ page, context }) => {
     await login(page);
+    await expect(page.getByText(USERS.manager.name)).toBeVisible();
+    await expect(page.getByText("Gerente", { exact: true })).toBeVisible();
+    // La cookie es HttpOnly: el JavaScript de la página no puede leerla.
+    const cookie = (await context.cookies()).find((c) => c.name === "lynna_session");
+    expect(cookie?.httpOnly).toBe(true);
+    expect(await page.evaluate(() => document.cookie)).not.toContain("lynna_session");
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Bienvenido a Lynna" })).toBeVisible();
+
     await page.getByRole("button", { name: /Salir/ }).click();
     await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/inventario");
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test("vendedor: cotiza pero no ve acciones de administración", async ({ page }) => {
+    await login(page, "seller");
+    await expect(page.getByText("Vendedor", { exact: true })).toBeVisible();
+    await sidebar(page).getByRole("link", { name: "Desarrollos y lotes" }).click();
+    // Esperar a que cargue el contenido antes de afirmar ausencias (si no, pasan durante el "Cargando…").
+    await expect(page.getByRole("button", { name: /Residencial Los Almendros/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Nuevo desarrollo" })).toHaveCount(0);
+    await page.getByRole("button", { name: /Residencial Los Almendros/ }).click();
+    await expect(page.getByText("Mz A · Lote 1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Lotes" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Importar CSV" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Cambiar estado" })).toHaveCount(0);
+    await shot(page, "14-vendedor-inventario");
+
+    await sidebar(page).getByRole("link", { name: "Cotizador" }).click();
+    await page.getByRole("button", { name: /Residencial Los Almendros/ }).click();
+    await page.getByRole("tab", { name: "Lista" }).click();
+    await page.getByRole("cell", { name: "Mz A · Lote 1", exact: true }).click();
+    await expect(page.getByText("Tabla de pagos")).toBeVisible();
+  });
+
+  test("admin de Ignia entra sin estar ligado a una desarrolladora", async ({ page }) => {
+    await login(page, "admin");
+    await expect(page.getByText("Ignia", { exact: true })).toBeVisible();
+    // Con una sola desarrolladora se muestra su nombre; con varias, un selector.
+    await expect(page.getByRole("banner").getByText("Desarrolladora Demo")).toBeVisible();
   });
 });
 

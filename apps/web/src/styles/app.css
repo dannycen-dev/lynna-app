@@ -151,6 +151,41 @@ textarea {
   color: var(--lynna-on-surface);
 }
 
+.navbar__tenant {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.navbar__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.15;
+}
+
+.navbar__avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.navbar__user-name {
+  display: block;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.navbar__user-role {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
 .navbar__env {
   font-size: 11px;
   font-weight: 700;
@@ -628,6 +663,28 @@ textarea {
   outline: none;
   border-color: var(--lynna-primary);
   box-shadow: 0 0 0 3px var(--lynna-primary-glow);
+}
+
+.input-group {
+  position: relative;
+}
+
+.input-group .input {
+  padding-right: 42px;
+}
+
+.input-group__btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 38px;
+  width: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: var(--lynna-muted);
+  cursor: pointer;
 }
 
 .form-grid {

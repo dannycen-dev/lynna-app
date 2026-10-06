@@ -5,12 +5,14 @@ import { LotStatusDialog } from "../components/LotStatusDialog";
 import { AvailabilityBar, Dialog, Empty, ErrorAlert, PageHeader, Spinner, StatusBadge } from "../components/ui";
 import { ApiError, useCreateDevelopment, useDeleteMedia, useDevelopments, useImportLots, useLots, useMedia, useSummary, useUploadMedia } from "../lib/api";
 import { area, compareLots, dateTime, money, num, slugify, STATUS_LABEL } from "../lib/format";
+import { useSession } from "../lib/session";
 import type { ImportResult, Lot, LotStatus, Media } from "../lib/types";
 
 // ── Lista de desarrollos ──────────────────────────────────────────────────────
 
 export function InventarioList() {
   const summary = useSummary();
+  const { canWrite } = useSession();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
 
@@ -20,9 +22,11 @@ export function InventarioList() {
         title="Desarrollos y lotes"
         subtitle="Inventario que usan el cotizador y el agente de WhatsApp."
         actions={
-          <button className="btn btn--primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> Nuevo desarrollo
-          </button>
+          canWrite && (
+            <button className="btn btn--primary" onClick={() => setCreating(true)}>
+              <Plus size={16} /> Nuevo desarrollo
+            </button>
+          )
         }
       />
       {summary.isPending && <Spinner />}
@@ -150,6 +154,7 @@ export function InventarioDevelopment() {
   const { dev = "" } = useParams();
   const developments = useDevelopments();
   const [tab, setTab] = useState<Tab>("lotes");
+  const { canWrite } = useSession();
   const development = developments.data?.find((d) => d.slug === dev);
 
   if (developments.isPending) return <Spinner />;
@@ -181,7 +186,7 @@ export function InventarioDevelopment() {
         {(
           [
             ["lotes", "Lotes", <LandPlot size={16} key="i" />],
-            ["importar", "Importar CSV", <FileSpreadsheet size={16} key="i" />],
+            ...(canWrite ? ([["importar", "Importar CSV", <FileSpreadsheet size={16} key="i" />]] as const) : []),
             ["media", "Fotos y planos", <ImagePlus size={16} key="i" />],
           ] as const
         ).map(([id, label, icon]) => (
@@ -200,6 +205,7 @@ export function InventarioDevelopment() {
 
 function LotsTab({ dev }: { dev: string }) {
   const lots = useLots(dev);
+  const { canWrite } = useSession();
   const [status, setStatus] = useState<LotStatus | "all">("all");
   const [editing, setEditing] = useState<Lot | null>(null);
   const rows = useMemo(() => (lots.data ?? []).filter((l) => status === "all" || l.status === status).sort(compareLots), [lots.data, status]);
@@ -219,7 +225,13 @@ function LotsTab({ dev }: { dev: string }) {
       <ErrorAlert error={lots.error} />
       {lots.data?.length === 0 && (
         <Empty icon={<FileSpreadsheet size={40} />} title="Este desarrollo aún no tiene lotes">
-          Cárgalos desde la pestaña <strong>Importar CSV</strong>.
+          {canWrite ? (
+            <>
+              Cárgalos desde la pestaña <strong>Importar CSV</strong>.
+            </>
+          ) : (
+            "Un gerente puede cargarlos."
+          )}
         </Empty>
       )}
       {rows.length > 0 && (
@@ -253,9 +265,11 @@ function LotsTab({ dev }: { dev: string }) {
                   </td>
                   <td className="num muted">{l.reservedUntil ? dateTime(l.reservedUntil) : ""}</td>
                   <td className="right">
-                    <button className="btn btn--sm" onClick={() => setEditing(l)}>
-                      Cambiar estado
-                    </button>
+                    {canWrite && (
+                      <button className="btn btn--sm" onClick={() => setEditing(l)}>
+                        Cambiar estado
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -401,6 +415,7 @@ const KIND_LABEL: Record<Media["kind"], string> = { photo: "Foto", plan: "Plano"
 
 function MediaTab({ dev }: { dev: string }) {
   const media = useMedia(dev);
+  const { canWrite } = useSession();
   const upload = useUploadMedia(dev);
   const remove = useDeleteMedia();
   const [kind, setKind] = useState<Media["kind"]>("photo");
@@ -410,6 +425,7 @@ function MediaTab({ dev }: { dev: string }) {
 
   return (
     <div className="stack">
+      {canWrite && (
       <div className="card">
         <div className="card__body row" style={{ alignItems: "flex-end", gap: 12 }}>
           <div className="field" style={{ width: 160 }}>
@@ -442,6 +458,7 @@ function MediaTab({ dev }: { dev: string }) {
           </label>
         </div>
       </div>
+      )}
       {storageMissing ? (
         <div className="alert alert--warning">El almacenamiento de archivos (R2) aún no está activado en este entorno.</div>
       ) : (
@@ -465,9 +482,11 @@ function MediaTab({ dev }: { dev: string }) {
                 <span className="badge badge--info badge--plain">{KIND_LABEL[m.kind]}</span>
                 {m.caption && <div style={{ marginTop: 4 }}>{m.caption}</div>}
               </div>
-              <button className="btn btn--sm btn--ghost btn--danger" onClick={() => remove.mutate(m.id)} aria-label="Eliminar">
-                <Trash2 size={15} />
-              </button>
+              {canWrite && (
+                <button className="btn btn--sm btn--ghost btn--danger" onClick={() => remove.mutate(m.id)} aria-label="Eliminar">
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
           </div>
         ))}

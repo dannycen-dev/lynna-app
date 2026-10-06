@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { ApiError, apiFetch } from "./api-client";
 import { useSession } from "./session";
+
+export { ApiError } from "./api-client";
 import type {
   Development,
   ImportResult,
@@ -11,63 +14,18 @@ import type {
   Prospect,
   Simulation,
   Summary,
-  Tenant,
 } from "./types";
-
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly body?: unknown,
-  ) {
-    super(message);
-  }
-}
-
-/** Mensaje legible para el usuario a partir de la respuesta de la API. */
-function describe(status: number, body: Record<string, unknown> | null): string {
-  if (body?.message && typeof body.message === "string") return body.message;
-  if (body?.issues && typeof body.issues === "object") {
-    const fields = Object.entries(body.issues as Record<string, string[]>).map(([k, v]) => `${k}: ${v.join(", ")}`);
-    if (fields.length) return `Revisa los datos — ${fields.join(" · ")}`;
-  }
-  if (status === 401) return "Tu sesión no es válida. Vuelve a entrar.";
-  if (status === 404) return "No encontrado.";
-  if (status === 503) return "Servicio no disponible en este entorno.";
-  return "Ocurrió un error inesperado. Intenta de nuevo.";
-}
-
-export async function apiFetch<T>(token: string | null, path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (token) headers.set("authorization", `Bearer ${token}`);
-  if (init.body && typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
-
-  const res = await fetch(path, { ...init, headers });
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const obj = (body && typeof body === "object" ? body : null) as Record<string, unknown> | null;
-    throw new ApiError(res.status, String(obj?.error ?? res.status), describe(res.status, obj), body);
-  }
-  return body as T;
-}
 
 /** Hook base: añade el token y el prefijo del tenant activo. */
 function useApi() {
-  const { token, tenant, signOut } = useSession();
+  const { tenant, expire } = useSession();
   const base = `/api/admin/tenants/${encodeURIComponent(tenant)}`;
   const call = async <T,>(path: string, init?: RequestInit) => {
     try {
-      return await apiFetch<T>(token, path.startsWith("/api/") ? path : `${base}${path}`, init);
+      return await apiFetch<T>(path.startsWith("/api/") ? path : `${base}${path}`, init);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) signOut();
+      // Sesión vencida o revocada: de vuelta al login.
+      if (err instanceof ApiError && err.status === 401) expire();
       throw err;
     }
   };
@@ -79,13 +37,12 @@ function useApiQuery<T>(key: QueryKey, path: string | null) {
   return useQuery({
     queryKey: [tenant, ...key],
     queryFn: () => call<T>(path!),
-    enabled: path !== null,
+    enabled: path !== null && tenant !== "",
   });
 }
 
 // ── Lecturas ──────────────────────────────────────────────────────────────────
 
-export const useTenants = () => useApiQuery<Tenant[]>(["tenants"], "/api/admin/tenants");
 export const useSummary = () => useApiQuery<Summary>(["summary"], "/summary");
 export const useDevelopments = () => useApiQuery<Development[]>(["developments"], "/developments");
 export const useLots = (dev: string | undefined) =>

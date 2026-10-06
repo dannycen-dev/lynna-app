@@ -127,7 +127,7 @@
 - [ ] **Bandeja de conversaciones**: el vendedor puede tomar el control (la IA se pausa en esa conversación) y devolverlo.
 - [ ] Filtros por vendedor, desarrollo, score y etapa; exportación CSV.
 - [ ] Dashboard: prospectos por fuente, conversión por etapa, tiempo de primera respuesta, citas.
-- [ ] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo.
+- [ ] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo. — _login con usuarios y roles (admin/owner/manager/seller) ya en dev; falta filtrar prospectos por vendedor asignado_
 
 ### 2.13 WhatsApp Business por la API oficial
 - [x] Cloud API de Meta (sin intermediarios no oficiales).
@@ -220,7 +220,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 | **1. Inventario** ✅ | Desarrollos, lotes, media en R2, motor de planes de pago, importación CSV, E2E con Playwright | §2.2, §2.4, §2.11 |
 | **2. WhatsApp** | Webhook, cola, DO, envío de medios, túnel local | §2.1, §2.3, §2.13 |
 | **3. Agente IA** | Tools, guardrails, validador, evals | §2.5, §2.6, §3 |
-| **4. CRM** 🟡 | Panel web ya en dev (inicio, cotizador, inventario, planes, prospectos). Falta: pipeline, bandeja, toma de control, asignación, notificaciones, login con usuarios | §2.9, §2.10, §2.12 |
+| **4. CRM** 🟡 | Panel web ya en dev (inicio, cotizador, inventario, planes, prospectos). Login con usuarios y roles listo. Falta: pipeline, bandeja, toma de control, asignación, notificaciones | §2.9, §2.10, §2.12 |
 | **5. Automatización** | Citas, recordatorios, seguimientos con Workflows | §2.7, §2.8 |
 | **6. Demo** | Datos de demo + número de pruebas + guion | §7 |
 | **7. Producción** | Deploy Cloudflare, dominio, onboarding del cliente | §8 |

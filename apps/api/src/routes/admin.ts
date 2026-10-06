@@ -19,19 +19,18 @@ import {
   VALUE_TYPES,
 } from "../db/schema";
 import { PlanError, todayIn, validatePlan } from "../financing";
-import { requireAdminToken } from "../lib/admin-auth";
+import { actorOf, authenticate, canAccessTenant, canWrite, type AuthVariables } from "../auth/middleware";
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
 
-// API de administración (operación de Ignia y, después, el panel). Auth provisional por token.
-const ACTOR = "admin-token";
+// API del panel. Personas con sesión (cookie) o automatización con ADMIN_API_TOKEN.
 
 type Tenant = typeof tenants.$inferSelect;
-type AppEnv = { Bindings: Env; Variables: { tenant: Tenant } };
+type AppEnv = { Bindings: Env; Variables: AuthVariables & { tenant: Tenant } };
 
 export const admin = new Hono<AppEnv>();
-admin.use("*", requireAdminToken);
+admin.use("*", authenticate);
 
 admin.onError((err, c) => {
   if (err instanceof PlanError) return c.json({ error: "invalid_plan", message: err.message }, 422);
@@ -44,12 +43,19 @@ admin.onError((err, c) => {
 
 admin.get("/tenants", async (c) => {
   const rows = await getDb(c.env.DB).select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).orderBy(asc(tenants.name));
-  return c.json(rows);
+  return c.json(rows.filter((t) => canAccessTenant(c.var.principal, t.id)));
 });
 
 admin.use("/tenants/:tenant/*", async (c, next) => {
   const tenant = await getDb(c.env.DB).select().from(tenants).where(eq(tenants.slug, c.req.param("tenant"))).get();
-  if (!tenant) return c.json({ error: "not_found", message: "Tenant no encontrado." }, 404);
+  // 404 también cuando no tiene acceso: no se revela qué desarrolladoras existen.
+  if (!tenant || !canAccessTenant(c.var.principal, tenant.id)) {
+    return c.json({ error: "not_found", message: "Desarrolladora no encontrada." }, 404);
+  }
+  // Vendedores: solo lectura y simulación.
+  if (c.req.method !== "GET" && !c.req.path.endsWith("/simulate") && !canWrite(c.var.principal)) {
+    return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
+  }
   c.set("tenant", tenant);
   await next();
 });
@@ -184,7 +190,7 @@ admin.post("/tenants/:tenant/developments/:development/lots/import", async (c) =
   if (errors.length > 0) {
     return c.json({ error: "validation", dryRun, valid: false, errors }, dryRun ? 200 : 422);
   }
-  const result = await importLots(db, { tenantId: c.var.tenant.id, developmentId: dev.id, actor: ACTOR }, rows, { dryRun });
+  const result = await importLots(db, { tenantId: c.var.tenant.id, developmentId: dev.id, actor: actorOf(c.var.principal) }, rows, { dryRun });
   log("info", "admin.lots_import", { tenantId: c.var.tenant.id, developmentId: dev.id, dryRun, ...result });
   return c.json({ dryRun, valid: true, ...result });
 });
@@ -204,7 +210,7 @@ admin.patch("/tenants/:tenant/lots/:lotId/status", async (c) => {
     c.var.tenant.id,
     c.req.param("lotId"),
     { ...rest, ...(reservedUntil ? { reservedUntil: Date.parse(reservedUntil) } : {}) },
-    ACTOR,
+    actorOf(c.var.principal),
   );
   return c.json(lot);
 });
@@ -279,7 +285,7 @@ admin.patch("/tenants/:tenant/payment-plans/:planId", async (c) => {
   if (!updated) return c.json({ error: "not_found" }, 404);
   await auditInsert(db, {
     tenantId: c.var.tenant.id,
-    actor: ACTOR,
+    actor: actorOf(c.var.principal),
     entity: "payment_plan",
     entityId: updated.id,
     action: body.data.active ? "activated" : "deactivated",
@@ -354,9 +360,9 @@ admin.post("/tenants/:tenant/developments/:development/media", async (c) => {
   const db = getDb(c.env.DB);
   const dev = await getDevelopmentBySlug(db, c.var.tenant.id, c.req.param("development"));
   if (!dev) return c.json({ error: "not_found" }, 404);
-  return uploadMedia(c, db, { tenantId: c.var.tenant.id, developmentId: dev.id, actor: ACTOR });
+  return uploadMedia(c, db, { tenantId: c.var.tenant.id, developmentId: dev.id, actor: actorOf(c.var.principal) });
 });
 
 admin.delete("/tenants/:tenant/media/:mediaId", async (c) =>
-  deleteMedia(c, getDb(c.env.DB), { tenantId: c.var.tenant.id, mediaId: c.req.param("mediaId"), actor: ACTOR }),
+  deleteMedia(c, getDb(c.env.DB), { tenantId: c.var.tenant.id, mediaId: c.req.param("mediaId"), actor: actorOf(c.var.principal) }),
 );

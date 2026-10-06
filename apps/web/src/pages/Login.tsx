@@ -1,13 +1,13 @@
-import { KeyRound } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { apiFetch } from "../lib/api";
-import { useSession } from "../lib/session";
-import type { Tenant } from "../lib/types";
 import { ErrorAlert } from "../components/ui";
+import { useSession } from "../lib/session";
 
 export function Login() {
-  const { signIn, tenant } = useSession();
-  const [token, setToken] = useState("");
+  const { signIn } = useSession();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [pending, setPending] = useState(false);
 
@@ -16,11 +16,10 @@ export function Login() {
     setPending(true);
     setError(null);
     try {
-      const tenants = await apiFetch<Tenant[]>(token.trim(), "/api/admin/tenants");
-      const keep = tenants.find((t) => t.slug === tenant) ?? tenants[0];
-      signIn(token.trim(), keep?.slug ?? "demo");
+      await signIn(email.trim(), password);
     } catch (err) {
       setError(err);
+      setPassword("");
     } finally {
       setPending(false);
     }
@@ -28,7 +27,7 @@ export function Login() {
 
   return (
     <div className="login">
-      <form className="card login__card" onSubmit={submit}>
+      <form className="card login__card" onSubmit={submit} noValidate>
         <div className="login__brand">
           <img src="/lynna-logo.png" alt="" />
           <h1>Lynna</h1>
@@ -38,24 +37,50 @@ export function Login() {
         </div>
         <div className="stack">
           <div className="field">
-            <label htmlFor="token">Clave de acceso</label>
+            <label htmlFor="email">Correo</label>
             <input
-              id="token"
+              id="email"
               className="input"
-              type="password"
-              autoComplete="current-password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Pega tu clave de administración"
+              type="email"
+              autoComplete="username"
+              inputMode="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@empresa.mx"
               required
+              autoFocus
             />
-            <span className="field__hint">Acceso provisional del equipo de Ignia. El login con usuarios llega en la siguiente fase.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="password">Contraseña</label>
+            <div className="input-group">
+              <input
+                id="password"
+                className="input"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="input-group__btn"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <ErrorAlert error={error} />
-          <button className="btn btn--primary" type="submit" disabled={pending || token.trim().length === 0} style={{ height: 42 }}>
-            <KeyRound size={16} />
-            {pending ? "Verificando…" : "Entrar"}
+          <button className="btn btn--primary" type="submit" disabled={pending || !email.trim() || !password} style={{ height: 42 }}>
+            <LogIn size={16} />
+            {pending ? "Entrando…" : "Entrar"}
           </button>
+          <p className="field__hint" style={{ textAlign: "center", margin: 0 }}>
+            ¿Sin acceso? Pídelo al administrador de tu empresa.
+          </p>
         </div>
       </form>
     </div>

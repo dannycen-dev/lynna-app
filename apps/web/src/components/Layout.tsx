@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
-import { useTenants } from "../lib/api";
 import { useSession } from "../lib/session";
 
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; soon?: boolean };
@@ -49,9 +48,17 @@ function environmentLabel(): string | null {
   return match ? match[1]! : null;
 }
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
 export function Layout() {
-  const { tenant, setTenant, signOut } = useSession();
-  const tenants = useTenants();
+  const { me, roleLabel, tenant, tenants, setTenant, signOut } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const env = environmentLabel();
@@ -75,19 +82,32 @@ export function Layout() {
         </NavLink>
         {env && <span className="navbar__env navbar__hide-sm">{env}</span>}
         <div className="navbar__spacer" />
-        {tenants.data && tenants.data.length > 0 && (
+        {tenants.length > 1 ? (
           <label className="navbar__hide-sm">
             <span className="sr-only">Desarrolladora</span>
             <select className="navbar__select" value={tenant} onChange={(e) => setTenant(e.target.value)}>
-              {tenants.data.map((t) => (
+              {tenants.map((t) => (
                 <option key={t.id} value={t.slug}>
                   {t.name}
                 </option>
               ))}
             </select>
           </label>
+        ) : (
+          <span className="navbar__tenant navbar__hide-sm">{tenants[0]?.name}</span>
         )}
-        <button className="navbar__btn" onClick={signOut} title="Cerrar sesión">
+        {me && (
+          <span className="navbar__user navbar__hide-sm" title={me.user.email}>
+            <span className="navbar__avatar" aria-hidden>
+              {initials(me.user.name)}
+            </span>
+            <span>
+              <span className="navbar__user-name">{me.user.name}</span>
+              <span className="navbar__user-role">{roleLabel}</span>
+            </span>
+          </span>
+        )}
+        <button className="navbar__btn" onClick={() => void signOut()} title="Cerrar sesión">
           <LogOut size={16} />
           <span className="navbar__hide-sm">Salir</span>
         </button>

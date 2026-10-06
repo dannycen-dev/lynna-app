@@ -11,4 +11,11 @@ export const LOCAL_PORT = 8788;
 /** Si está definida, las pruebas corren contra un entorno desplegado (solo @smoke). */
 export const REMOTE_BASE_URL = process.env.E2E_BASE_URL;
 
+/** Usuarios que crea scripts/start-local-api.sh en el servidor de pruebas (solo local/CI). */
+export const USERS = {
+  manager: { email: "gerente@demo.lynna.mx", password: "Gerente-E2E-2026", name: "Gerente E2E" },
+  seller: { email: "vendedor@demo.lynna.mx", password: "Vendedor-E2E-2026", name: "Vendedor E2E" },
+  admin: { email: "ops@igniastudio.mx", password: "Admin-E2E-2026!", name: "Ops Ignia" },
+} as const;
+
 export const adminHeaders = { authorization: `Bearer ${LOCAL_SECRETS.ADMIN_API_TOKEN}` };

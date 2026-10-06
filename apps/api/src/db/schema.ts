@@ -254,3 +254,53 @@ export const auditLog = sqliteTable(
   },
   (t) => [index("audit_entity_idx").on(t.tenantId, t.entity, t.entityId)],
 );
+
+// ── Usuarios y sesiones ─────────────────────────────────────────────────────────
+// admin = equipo Ignia (sin tenant, ve todas las desarrolladoras).
+// owner/manager administran el inventario; seller consulta y cotiza.
+export const USER_ROLES = ["admin", "owner", "manager", "seller"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+export const users = sqliteTable(
+  "users",
+  {
+    id: id(),
+    // null solo para role=admin
+    tenantId: text("tenant_id").references(() => tenants.id),
+    email: text("email").notNull(), // siempre en minúsculas
+    name: text("name").notNull(),
+    // pbkdf2-sha256$<iteraciones>$<sal b64>$<hash b64>
+    passwordHash: text("password_hash").notNull(),
+    role: text("role", { enum: USER_ROLES }).notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    lastLoginAt: integer("last_login_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("users_email_uq").on(t.email)],
+);
+
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    // SHA-256 del token de la cookie: si se filtra la tabla, los tokens no sirven.
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: createdAt(),
+    userAgent: text("user_agent"),
+  },
+  (t) => [index("sessions_user_idx").on(t.userId)],
+);
+
+// Intentos fallidos de login, para bloquear fuerza bruta por correo.
+export const loginAttempts = sqliteTable(
+  "login_attempts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    email: text("email").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("login_attempts_email_idx").on(t.email, t.createdAt)],
+);

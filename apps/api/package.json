@@ -27,7 +27,8 @@
     "db:seed:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 execute DB --env stg --remote --file=seed/demo.sql",
     "secrets:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.dev --env dev",
     "secrets:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.stg --env stg",
-    "secrets:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.prod --env prod"
+    "secrets:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.prod --env prod",
+    "user:create": "node scripts/create-user.mjs"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
