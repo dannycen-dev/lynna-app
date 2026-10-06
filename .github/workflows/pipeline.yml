@@ -1,0 +1,53 @@
+name: Pipeline
+
+# PR            → check
+# push a main   → check → dev
+# tag v*        → check → stg → prod (requiere aprobación en el environment "prod")
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tipos de wrangler al día
+        run: pnpm --filter @lynna/api exec wrangler types --strict-vars=false --check
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  deploy-stg:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: stg
+    secrets: inherit
+
+  deploy-prod:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: deploy-stg
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+    secrets: inherit

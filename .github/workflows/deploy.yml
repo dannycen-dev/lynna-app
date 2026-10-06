@@ -1,0 +1,52 @@
+name: Deploy
+
+# Reutilizable: migra la D1 del entorno y despliega el Worker. Las migraciones van ANTES del
+# deploy, así que deben ser compatibles con la versión anterior del código (expand → contract).
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Verificar credenciales
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Falta el secreto CLOUDFLARE_API_TOKEN (repo o environment '${{ inputs.environment }}')."
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migraciones D1
+        run: pnpm --filter @lynna/api db:migrate:${{ inputs.environment }}
+      - name: Deploy
+        run: pnpm --filter @lynna/api deploy:${{ inputs.environment }}
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5; do
+            body=$(curl -fsS "https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev/health") && echo "$body" && \
+              echo "$body" | grep -q '"env":"${{ inputs.environment }}"' && exit 0
+            sleep 5
+          done
+          echo "::error::El health check de ${{ inputs.environment }} no respondió como se esperaba."
+          exit 1

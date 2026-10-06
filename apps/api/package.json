@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler dev",
-    "deploy": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler deploy",
+    "deploy": "echo \"Usa deploy:dev | deploy:stg | deploy:prod\" && exit 1",
     "wrangler": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler",
     "typegen": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler types --strict-vars=false",
     "typecheck": "tsc",
@@ -13,7 +13,21 @@
     "db:migrate:local": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 migrations apply DB --local",
     "db:seed:local": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 execute DB --local --file=seed/demo.sql",
     "simulate": "node scripts/simulate-inbound.mjs",
-    "tunnel": "cloudflared tunnel --url http://localhost:8787"
+    "tunnel": "cloudflared tunnel --url http://localhost:8787",
+    "deploy:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler deploy --env dev",
+    "db:migrate:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 migrations apply DB --env dev --remote",
+    "tail:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler tail --env dev --format pretty",
+    "deploy:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler deploy --env stg",
+    "db:migrate:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 migrations apply DB --env stg --remote",
+    "tail:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler tail --env stg --format pretty",
+    "deploy:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler deploy --env prod",
+    "db:migrate:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 migrations apply DB --env prod --remote",
+    "tail:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler tail --env prod --format pretty",
+    "db:seed:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 execute DB --env dev --remote --file=seed/demo.sql",
+    "db:seed:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler d1 execute DB --env stg --remote --file=seed/demo.sql",
+    "secrets:dev": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.dev --env dev",
+    "secrets:stg": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.stg --env stg",
+    "secrets:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.prod --env prod"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",

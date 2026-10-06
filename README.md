@@ -78,7 +78,57 @@ La URL del túnel rápido cambia en cada arranque; hay que actualizarla en Meta.
 - El estado de un lote solo lo cambia un humano; la IA solo lo lee.
 - `compatibility_date` debe ser ≤ a la que soporta el workerd de wrangler **y** el de vitest-pool-workers.
 
-## Despliegue (pendiente)
+## Entornos
 
-Antes de cualquier comando remoto: `npx wrangler whoami` debe mostrar la cuenta de **Ignia Studio**.
-Después: fijar `account_id`, crear D1/R2/Queues y reemplazar el `database_id` placeholder en `wrangler.jsonc`.
+| Entorno | Worker / URL | D1 | Datos | Cómo se despliega |
+|---|---|---|---|---|
+| **local** | `wrangler dev` → `localhost:8787` | `.wrangler/state` | seed demo | `pnpm dev` |
+| **dev** | `lynna-api-dev.igniastudiomx.workers.dev` | `lynna-dev` | seed demo | automático en cada push a `main` |
+| **stg** | `lynna-api-stg.igniastudiomx.workers.dev` | `lynna-stg` | seed demo | tag `v*` |
+| **prod** | `lynna-api-prod.igniastudiomx.workers.dev` | `lynna-prod` | reales (nunca seed) | tag `v*` + aprobación en GitHub |
+
+Todo vive en la cuenta Cloudflare de **Ignia Studio** (`account_id` fijado en `wrangler.jsonc`).
+Cada entorno tiene sus propias colas (`lynna-wa-inbound-<env>` + DLQ), D1 y secretos; nada se comparte.
+
+### Flujo de trabajo
+
+1. Rama corta desde `main` → PR. El pipeline corre tipos, typecheck y pruebas.
+2. Merge a `main` → migraciones + deploy a **dev** + health check.
+3. Release: `git tag v0.1.0 && git push origin v0.1.0` → **stg**; al aprobar el environment `prod` en GitHub → **prod**.
+4. Las migraciones corren **antes** del deploy: deben ser compatibles con el código anterior
+   (agregar columnas/tablas primero; borrar o renombrar en un release posterior).
+
+### Secretos por entorno
+
+Los valores viven en `apps/api/.dev.vars.<env>` (ignorados por git) y se suben con:
+
+```bash
+pnpm --filter @lynna/api secrets:dev     # o secrets:stg / secrets:prod
+```
+
+`secrets.required` en `wrangler.jsonc` impide desplegar si falta alguno. Mientras no haya credenciales
+reales de Meta, `WHATSAPP_APP_SECRET` y `WHATSAPP_ACCESS_TOKEN` valen `PENDIENTE` (el webhook rechaza todo con 403).
+
+### Comandos manuales (perfil `wrangler-ignia`)
+
+Los scripts remotos usan `XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia` (sesión de wrangler de Ignia).
+
+| Comando (`pnpm --filter @lynna/api …`) | Qué hace |
+|---|---|
+| `deploy:<env>` | Despliega el Worker del entorno |
+| `db:migrate:<env>` | Aplica migraciones pendientes a la D1 remota |
+| `db:seed:dev` / `db:seed:stg` | Recarga datos de demo (no existe para prod) |
+| `tail:<env>` | Logs en vivo |
+| `secrets:<env>` | Sube `.dev.vars.<env>` como secretos |
+
+### CI/CD en GitHub
+
+- `.github/workflows/pipeline.yml` orquesta; `deploy.yml` es el job reutilizable (migrar → desplegar → health check).
+- Requiere el secreto de repo **`CLOUDFLARE_API_TOKEN`** (token de la cuenta de Ignia con permisos de
+  Workers Scripts, D1, Queues y Account Settings de lectura).
+- Environments de GitHub: `dev` (solo `main`), `stg` y `prod` (solo tags `v*`; `prod` exige aprobación).
+
+### Pendientes de infraestructura
+
+- Activar **R2** en la cuenta de Ignia y crear `lynna-media-{dev,stg,prod}` (Fase 1).
+- Dominio propio para prod (hoy usa `workers.dev`).
