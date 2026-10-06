@@ -1,0 +1,8 @@
+# Copia este archivo a .dev.vars (no se versiona) y llena los valores.
+
+# Meta App → Configuración → Básica → "Clave secreta de la app". Valida X-Hub-Signature-256.
+WHATSAPP_APP_SECRET=
+# Texto libre que eliges tú; se pega igual en Meta → WhatsApp → Configuración → Webhook.
+WHATSAPP_VERIFY_TOKEN=
+# Token del usuario del sistema (Business Manager). Fase 0: uno global; después, cifrado por tenant.
+WHATSAPP_ACCESS_TOKEN=

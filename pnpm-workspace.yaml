@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+
+# pnpm 11 bloquea scripts de instalación por defecto; solo estos necesitan binarios nativos.
+allowBuilds:
+  esbuild: true
+  workerd: true

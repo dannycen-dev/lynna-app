@@ -1,0 +1,30 @@
+{
+  "name": "@lynna/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler dev",
+    "deploy": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler deploy",
+    "wrangler": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler",
+    "typegen": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler types --strict-vars=false",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler d1 migrations apply DB --local",
+    "db:seed:local": "XDG_CONFIG_HOME=$HOME/.wrangler-ignia wrangler d1 execute DB --local --file=seed/demo.sql",
+    "simulate": "node scripts/simulate-inbound.mjs",
+    "tunnel": "cloudflared tunnel --url http://localhost:8787"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.3",
+    "hono": "^4.13.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.147.0"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "lynna-api",
+  "main": "src/index.ts",
+  // Debe ser <= a la fecha que soporta el workerd de wrangler Y el de vitest-pool-workers.
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  // Se fija al iniciar sesión con la cuenta de Ignia Studio; nunca desplegar en otra cuenta.
+  "account_id": "76d4525e9674ff3e597084e012f8619e", // Ignia Studio
+  "observability": { "enabled": true },
+
+  "vars": {
+    "ENVIRONMENT": "local",
+    "WHATSAPP_GRAPH_VERSION": "v23.0",
+    // Ventana para agrupar ráfagas de mensajes del mismo prospecto antes de responder.
+    "DEBOUNCE_MS": "3000",
+    // off | ack — en la Fase 0 aún no hay IA; "ack" envía un acuse fijo para probar el circuito.
+    "AUTO_REPLY_MODE": "off"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lynna",
+      // Placeholder local: se reemplaza por el ID real al crear la BD en la cuenta de Ignia.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "lynna-media" }],
+
+  "queues": {
+    "producers": [{ "binding": "WA_INBOUND", "queue": "lynna-wa-inbound" }],
+    "consumers": [
+      {
+        "queue": "lynna-wa-inbound",
+        "max_batch_size": 10,
+        "max_batch_timeout": 2,
+        "max_retries": 5,
+        "dead_letter_queue": "lynna-wa-inbound-dlq"
+      }
+    ]
+  },
+
+  "durable_objects": {
+    "bindings": [{ "name": "CONVERSATION", "class_name": "ConversationDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ConversationDO"] }]
+}
