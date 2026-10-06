@@ -61,13 +61,17 @@ Usuarios ficticios de demo (uno por rol, desarrolladora `demo`, contraseña `Lyn
 | miguel.torres@lynna.mx | seller |
 | ana.hernandez@lynna.mx | seller |
 
+Datos ficticios del CRM (12 prospectos en todas las etapas, conversaciones, notas, historial y avisos,
+repartidos entre Miguel y Ana, más uno sin asignar) — ya cargados en **dev** y **stg**:
+`pnpm demo:crm --target local|dev|stg` (idempotente; nunca en prod). Corre antes `pnpm demo:users`.
+
 ## Usuarios y acceso
 
 | Rol | Alcance |
 |---|---|
 | `admin` | Equipo Ignia: todas las desarrolladoras |
-| `owner`, `manager` | Su desarrolladora: inventario, planes, importación, estados |
-| `seller` | Su desarrolladora: consulta y cotiza; no modifica |
+| `owner`, `manager` | Su desarrolladora: inventario, planes, importación, estados, todos los prospectos, asignación y configuración |
+| `seller` | Solo **sus** prospectos (conversaciones, notas, etapas, avisos); consulta y cotiza; no modifica inventario |
 
 - Contraseñas con PBKDF2-SHA256 (100k iteraciones, sal por usuario); se re-hashean solas si suben las iteraciones.
 - Sesión en cookie `lynna_session` `HttpOnly` + `Secure` + `SameSite=Lax`, 7 días deslizantes; en BD solo el SHA-256 del token.
