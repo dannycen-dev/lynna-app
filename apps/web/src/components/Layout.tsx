@@ -44,7 +44,8 @@ const ENV_LABEL: Record<string, string> = { localhost: "local", "127.0.0.1": "lo
 function environmentLabel(): string | null {
   const host = window.location.hostname;
   if (ENV_LABEL[host]) return ENV_LABEL[host];
-  const match = /lynna-api-(dev|stg)\./.exec(host);
+  // devlynna.igniastudio.mx → "dev", stglynna… → "stg"; producción no muestra etiqueta.
+  const match = /^(dev|stg)lynna\./.exec(host);
   return match ? match[1]! : null;
 }
 

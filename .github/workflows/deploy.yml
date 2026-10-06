@@ -17,13 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}
-      url: https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev
+      url: ${{ steps.host.outputs.url }}
     concurrency:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: false
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
+      - name: Dominio del entorno
+        id: host
+        run: |
+          case "${{ inputs.environment }}" in
+            dev) host=devlynna ;; stg) host=stglynna ;; prod) host=lynna ;;
+            *) echo "::error::Entorno desconocido"; exit 1 ;;
+          esac
+          echo "url=https://$host.igniastudio.mx" >> "$GITHUB_OUTPUT"
       - name: Verificar credenciales
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
@@ -50,7 +58,7 @@ jobs:
       - name: Health check
         run: |
           for i in 1 2 3 4 5; do
-            body=$(curl -fsS "https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev/health") && echo "$body" && \
+            body=$(curl -fsS "${{ steps.host.outputs.url }}/health") && echo "$body" && \
               echo "$body" | grep -q '"env":"${{ inputs.environment }}"' && exit 0
             sleep 5
           done
@@ -60,7 +68,7 @@ jobs:
         run: pnpm --filter @lynna/e2e exec playwright install --with-deps chromium
       - name: Smoke E2E (Playwright, solo lectura)
         env:
-          E2E_BASE_URL: https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev
+          E2E_BASE_URL: ${{ steps.host.outputs.url }}
           E2E_EXPECT_ENV: ${{ inputs.environment }}
         run: pnpm e2e:smoke
       - uses: actions/upload-artifact@v4

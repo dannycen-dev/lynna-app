@@ -154,9 +154,9 @@ La URL del túnel rápido cambia en cada arranque; hay que actualizarla en Meta.
 | Entorno | Worker / URL | D1 | Datos | Cómo se despliega |
 |---|---|---|---|---|
 | **local** | `wrangler dev` → `localhost:8787` | `.wrangler/state` | seed demo | `pnpm dev` |
-| **dev** | `lynna-api-dev.igniastudiomx.workers.dev` | `lynna-dev` | seed demo | automático en cada push a `main` |
-| **stg** | `lynna-api-stg.igniastudiomx.workers.dev` | `lynna-stg` | seed demo | tag `v*` |
-| **prod** | `lynna-api-prod.igniastudiomx.workers.dev` | `lynna-prod` | reales (nunca seed) | tag `v*` + aprobación en GitHub |
+| **dev** | https://devlynna.igniastudio.mx | `lynna-dev` | seed demo | automático en cada push a `main` |
+| **stg** | https://stglynna.igniastudio.mx | `lynna-stg` | seed demo + usuarios de demo | tag `v*` |
+| **prod** | https://lynna.igniastudio.mx | `lynna-prod` | reales (nunca seed) | tag `v*` + aprobación en GitHub |
 
 Todo vive en la cuenta Cloudflare de **Ignia Studio** (`account_id` fijado en `wrangler.jsonc`).
 Cada entorno tiene sus propias colas (`lynna-wa-inbound-<env>` + DLQ), D1 y secretos; nada se comparte.
@@ -202,4 +202,5 @@ Los scripts remotos usan `XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia` (sesió
 ### Pendientes de infraestructura
 
 - Activar **R2** en la cuenta de Ignia y crear `lynna-media-{dev,stg,prod}` (Fase 1).
-- Dominio propio para prod (hoy usa `workers.dev`).
+- Dominios: Custom Domains de Workers sobre la zona `igniastudio.mx` (DNS y certificado automáticos);
+  `*.workers.dev` desactivado para que cada entorno tenga una sola URL.

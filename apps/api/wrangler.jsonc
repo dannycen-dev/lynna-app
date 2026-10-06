@@ -1,9 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   // Nivel superior = LOCAL (`wrangler dev`). Los entornos remotos están en "env":
-  //   dev  → lynna-api-dev   (se despliega solo al hacer push a main)
-  //   stg  → lynna-api-stg   (tag v*)
-  //   prod → lynna-api-prod  (tag v*, con aprobación manual en GitHub)
+  //   dev  → lynna-api-dev   https://devlynna.igniastudio.mx  (se despliega solo al hacer push a main)
+  //   stg  → lynna-api-stg   https://stglynna.igniastudio.mx  (tag v*)
+  //   prod → lynna-api-prod  https://lynna.igniastudio.mx     (tag v*, con aprobación manual en GitHub)
+  // Custom Domains: Cloudflare crea el DNS y el certificado. Sin *.workers.dev (una sola URL por entorno).
   // Bindings, vars y secretos NO se heredan entre entornos: cada uno los declara completos.
   "name": "lynna-api",
   "main": "src/index.ts",
@@ -75,7 +76,8 @@
   "env": {
     "dev": {
       "name": "lynna-api-dev",
-      "workers_dev": true,
+      "workers_dev": false,
+      "routes": [{ "pattern": "devlynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "dev",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
@@ -114,7 +116,8 @@
 
     "stg": {
       "name": "lynna-api-stg",
-      "workers_dev": true,
+      "workers_dev": false,
+      "routes": [{ "pattern": "stglynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "stg",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
@@ -152,8 +155,8 @@
 
     "prod": {
       "name": "lynna-api-prod",
-      // Temporal hasta definir dominio propio (routes / custom_domain); entonces workers_dev: false.
-      "workers_dev": true,
+      "workers_dev": false,
+      "routes": [{ "pattern": "lynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "prod",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
