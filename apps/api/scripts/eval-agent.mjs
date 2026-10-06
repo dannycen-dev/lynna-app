@@ -54,7 +54,7 @@ const SCENARIOS = [
   {
     id: "calificacion",
     messages: ["Me llamo Juan Pérez, tengo 150 mil de enganche y lo quiero para invertir"],
-    checks: [NO_FALLBACK, TOOL("actualizar_prospecto"), (r) => (r.prospect?.purpose === "inversion" && r.prospect?.name) || "no guardó nombre/uso"],
+    checks: [NO_FALLBACK, TOOL("actualizar_prospecto"), (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
 ];
