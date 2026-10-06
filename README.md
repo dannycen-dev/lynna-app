@@ -110,9 +110,30 @@ CSV de lotes — columnas (acepta `,` o `;` y encabezados en español):
 `manzana, lote, superficie_m2, precio_m2` (obligatorias) y `frente_m, fondo_m, precio_total, estado, caracteristicas`.
 `estado`: disponible / apartado / vendido / bloqueado. Si falta `precio_total` se calcula.
 
+## Agente de IA (Workers AI)
+
+El agente atiende por WhatsApp con un modelo de **Workers AI** (binding `AI`, se cobra en neuronas; el plan
+gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
+
+| Pieza | Qué hace |
+|---|---|
+| `tools.ts` | Lo ÚNICO que la IA puede hacer: buscar lotes disponibles, detalle, planes, simular plan, guardar datos del prospecto, escalar a asesor. Descontar, apartar, confirmar pagos o tocar contratos no existen |
+| `guard.ts` | Valida cada respuesta: montos y lotes solo de herramientas; bloquea descuentos, apartados/pagos confirmados, fechas de escrituración, garantías |
+| `intent.ts` | Red de seguridad: las frases de compra del cliente y otros temas se turnan a un asesor aunque el modelo no lo haga |
+| `prompt.ts` | Prompt versionado (`PROMPT_VERSION`) |
+| `runner.ts` | Ciclo modelo ↔ herramientas, un reintento si el validador bloquea, luego mensaje seguro + escalamiento |
+| `respond.ts` | Contexto, bitácora `ai_audit_log` y envío por WhatsApp (o "simulado" sin credenciales de Meta) |
+
+- **Simulador**: en el panel, *Agente de IA*. Mismo código que WhatsApp, sin Meta.
+- **Modelo**: `AI_MODEL` en `wrangler.jsonc` por entorno. Para elegirlo con datos:
+  `pnpm --filter @lynna/api eval:agent --url https://devlynna.igniastudio.mx --token <ADMIN_API_TOKEN> --models m1,m2`.
+- **Pruebas**: Vitest usa un LLM "de guion"; el E2E usa `AI_MODEL=fake` (determinista, solo `ENVIRONMENT=local`, sin red).
+- `pnpm dev` usa Workers AI real (gasta neuronas de la cuenta de Ignia). `wrangler dev` se cae a veces al recargar
+  en caliente con la conexión remota de IA: si pasa, reinícialo.
+
 ## Conectar un número real de WhatsApp (local)
 
-1. Levanta un túnel rápido (no requiere cuenta): `pnpm --filter @lynna/api tunnel` → copia la URL `https://….trycloudflare.com`.
+1. Levanta un túnel rápido: `cd apps/api && pnpm exec wrangler dev --tunnel` (o `pnpm --filter @lynna/api tunnel` con cloudflared) → copia la URL `https://….trycloudflare.com`.
 2. En Meta → tu app → WhatsApp → Configuración → Webhook:
    - URL de devolución: `https://….trycloudflare.com/whatsapp/webhook`
    - Token de verificación: el `WHATSAPP_VERIFY_TOKEN` de `.dev.vars`

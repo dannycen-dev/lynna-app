@@ -54,39 +54,39 @@
 - [x] Consumidor de la cola → **Durable Object por número**: serializa mensajes del mismo prospecto y agrupa ráfagas (debounce ~3 s).
 - [x] Dedupe por `wamid`; los acuses de entrega nunca retroceden de estado (`read` no lo pisa un `sent` tardío).
 - [ ] Control de **ventana de 24 h**: dentro → texto libre; fuera → solo plantillas aprobadas.
-- [ ] Respuesta de respaldo si la IA falla ("Un asesor te contactará en breve") + alerta interna.
+- [x] Respuesta de respaldo si la IA falla ("Un asesor te contactará en breve") + alerta interna. — _mensaje seguro + escalamiento; la alerta al vendedor llega con la Fase 4_
 - **Acepta:** un mensaje entrante a las 3 a.m. recibe respuesta coherente en < 15 s.
 
 ### 2.2 Información de desarrollos y terrenos disponibles
 - [x] Modelo de datos: `developments`, `lots` (manzana, número, m², precio/m², precio total, estado, frente/fondo, orientación, coordenadas/GeoJSON). — _orientación pendiente; GeoJSON en columna `geojson`_
-- [ ] Tool de IA `buscar_lotes(desarrollo, presupuesto_max, m2_min, …)` → consulta **en vivo** a D1, solo lotes `disponible`. — _lógica lista en `catalog/service.ts` (`searchAvailableLots`); la tool se conecta en Fase 3_
-- [ ] Tool `info_desarrollo(id)` → amenidades, ubicación, servicios, etapa.
+- [x] Tool de IA `buscar_lotes(desarrollo, presupuesto_max, m2_min, …)` → consulta **en vivo** a D1, solo lotes `disponible`. — _consulta en vivo, solo disponibles, máx. 6_
+- [x] Tool `info_desarrollo(id)` → amenidades, ubicación, servicios, etapa. — _implementada como `listar_desarrollos`_
 - [ ] Base de conocimiento (FAQ, reglamento, proceso de compra) indexada en **Vectorize** para preguntas abiertas.
 - **Acepta:** la IA nunca menciona un lote que no venga del resultado de una tool.
 
 ### 2.3 Envío de precios, medidas, ubicación, fotos, planos y características
 - [ ] Fotos y planos en **R2** asociados a desarrollo/lote; carga desde el panel. — _subida/servido listos y probados en local; falta activar R2 en la cuenta de Ignia_
 - [ ] Envío por Cloud API: `image`, `document` (PDF del plano), `location` (lat/lng del desarrollo).
-- [ ] Ficha de lote generada desde datos reales (precio y medidas salen de la BD, no del modelo).
+- [x] Ficha de lote generada desde datos reales (precio y medidas salen de la BD, no del modelo). — _`detalle_lote`_
 - [ ] Opcional fase 2: PDF de cotización con Browser Rendering.
 - **Acepta:** al pedir "mándame el plano" llega el PDF correcto del desarrollo consultado.
 
 ### 2.4 Enganche, mensualidades y formas de pago
 - [x] Portar el **motor de planes de pago** de Lynna (`payment_plan`: apartado, enganche %, meses, interés, contra entrega) a una librería TS pura y testeada. — _`src/financing/`: `with_interest` y `on_delivery`, descuentos por total o por m²_
-- [ ] Tool `simular_plan(lote_id, plan_id)` → tabla de pagos calculada por código, nunca por el LLM. — _lógica lista (`simulateForLot`, solo lotes disponibles); la tool se conecta en Fase 3_
-- [ ] Toda simulación lleva la leyenda "cotización informativa, sujeta a confirmación por un asesor".
+- [x] Tool `simular_plan(lote_id, plan_id)` → tabla de pagos calculada por código, nunca por el LLM.
+- [x] Toda simulación lleva la leyenda "cotización informativa, sujeta a confirmación por un asesor".
 - [ ] Formas de pago aceptadas configurables por desarrollo (texto informativo; **no** se cobra por WhatsApp).
 - **Acepta:** tests unitarios con los planes reales del cliente cuadran al centavo.
 
 ### 2.5 Calificación de prospectos (presupuesto e interés)
-- [ ] La IA extrae a campos estructurados: presupuesto, enganche disponible, plazo, uso (inversión/vivienda), urgencia, desarrollo de interés.
-- [ ] Score calculado por **reglas en código** (configurable), no por el LLM; el LLM solo extrae datos.
-- [ ] Etiquetas: `frío`, `tibio`, `caliente`, `listo para comprar`.
+- [x] La IA extrae a campos estructurados: presupuesto, enganche disponible, plazo, uso (inversión/vivienda), urgencia, desarrollo de interés.
+- [x] Score calculado por **reglas en código** (configurable), no por el LLM; el LLM solo extrae datos.
+- [x] Etiquetas: `frío`, `tibio`, `caliente`, `listo para comprar`.
 - **Acepta:** el score es reproducible con los mismos datos.
 
 ### 2.6 Registro de nombre, teléfono y datos
 - [x] Alta automática de prospecto al primer mensaje (teléfono de WhatsApp + nombre de perfil).
-- [ ] Tool `actualizar_prospecto(campos)` con lista blanca de campos (nombre, correo, ciudad, presupuesto…).
+- [x] Tool `actualizar_prospecto(campos)` con lista blanca de campos (nombre, correo, ciudad, presupuesto…).
 - [ ] Consentimiento / aviso de privacidad enviado en el primer contacto (LFPDPPP).
 - [x] Un contacto existente no se duplica: se reutiliza y se añade al historial.
 
@@ -94,7 +94,7 @@
 - [ ] **Workflow** por prospecto: secuencia configurable (p. ej. +1 día, +3 días, +7 días) con `step.sleep`.
 - [ ] Se cancela si el prospecto responde, agenda cita, pide no ser contactado o un vendedor toma la conversación.
 - [ ] Fuera de 24 h solo **plantillas aprobadas por Meta** (categoría marketing/utility).
-- [ ] Opt-out ("ya no me escriban", "baja") respetado y registrado.
+- [x] Opt-out ("ya no me escriban", "baja") respetado y registrado.
 - **Acepta:** ningún prospecto con opt-out recibe mensajes.
 
 ### 2.8 Agenda de citas y visitas
@@ -116,7 +116,7 @@
 
 ### 2.11 Control de disponibilidad de terrenos
 - [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _hoy vía API de administración; panel en Fase 4_
-- [ ] La IA consulta disponibilidad **en cada respuesta** que mencione un lote (sin caché en el prompt).
+- [x] La IA consulta disponibilidad **en cada respuesta** que mencione un lote (sin caché en el prompt).
 - [ ] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor. — _cron cada 15 min ya libera y audita; falta el aviso al vendedor (Fase 4)_
 - [x] Importación masiva de inventario (CSV/Excel) para cargar los proyectos del cliente. — _CSV con encabezados en español, `dryRun`, todo o nada_
 - **Acepta:** un lote marcado `vendido` desaparece de las respuestas de la IA al instante.
@@ -157,23 +157,23 @@ La IA **solo puede hacer lo que sus tools permiten**. Las acciones prohibidas **
 | Resuelva conflictos importantes | Detección de molestia/queja → escalar y pausar IA. |
 | Tome decisiones legales o financieras | Prompt de sistema + escalamiento; la IA se presenta como asistente informativo. |
 
-- [ ] Prompt de sistema versionado en el repo con estas reglas.
-- [ ] **Validador de salida** (código) antes de enviar cualquier mensaje: lotes mencionados, montos, fechas y palabras clave.
-- [ ] Toda respuesta y tool call guardada en `ai_audit_log` (entrada, tools, salida, versión de prompt, modelo).
-- [ ] **Suite de evaluación** con conversaciones adversarias ("dame 20 % de descuento", "¿me lo apartas ya?", "¿cuándo escrituro?") que corre en CI; debe pasar al 100 %.
+- [x] Prompt de sistema versionado en el repo con estas reglas.
+- [x] **Validador de salida** (código) antes de enviar cualquier mensaje: lotes mencionados, montos, fechas y palabras clave.
+- [x] Toda respuesta y tool call guardada en `ai_audit_log` (entrada, tools, salida, versión de prompt, modelo).
+- [x] **Suite de evaluación** con conversaciones adversarias ("dame 20 % de descuento", "¿me lo apartas ya?", "¿cuándo escrituro?") que corre en CI; debe pasar al 100 %. — _`pnpm eval:agent` (10 conversaciones, varios modelos); en CI corre la versión con LLM de guion, sin gastar neuronas_
 
 ### 3.2 Intención de compra → humano
 Frases del cliente que deben **escalar a un vendedor** (la IA responde con calidez y avisa que un asesor sigue):
 
-- [ ] "Quiero comprar."
-- [ ] "¿Cómo puedo apartarlo?"
-- [ ] "Quiero ver el contrato."
-- [ ] "¿Puedo pagar hoy?"
-- [ ] "¿Qué necesito para escriturar?"
+- [x] "Quiero comprar."
+- [x] "¿Cómo puedo apartarlo?"
+- [x] "Quiero ver el contrato."
+- [x] "¿Puedo pagar hoy?"
+- [x] "¿Qué necesito para escriturar?"
 
 Implementación:
-- [ ] Clasificación de intención como salida estructurada del LLM + lista de frases/regex como red de seguridad.
-- [ ] Al detectarla: etapa → "Listo para comprar", score máximo, notificación al vendedor (§2.10), IA en modo "acompañamiento" (no cierra nada).
+- [x] Clasificación de intención como salida estructurada del LLM + lista de frases/regex como red de seguridad. — _tool escalar_a_asesor + reglas en intent.ts_
+- [x] Al detectarla: etapa → "Listo para comprar", score máximo, notificación al vendedor (§2.10), IA en modo "acompañamiento" (no cierra nada). — _la notificación al vendedor llega con la Fase 4_
 
 ---
 
@@ -219,7 +219,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 | **0. Base** ✅ | Monorepo, Worker Hono, D1/Drizzle, webhook WhatsApp, CI con tests (auth → Fase 4) | §1 |
 | **1. Inventario** ✅ | Desarrollos, lotes, media en R2, motor de planes de pago, importación CSV, E2E con Playwright | §2.2, §2.4, §2.11 |
 | **2. WhatsApp** | Webhook, cola, DO, envío de medios, túnel local | §2.1, §2.3, §2.13 |
-| **3. Agente IA** | Tools, guardrails, validador, evals | §2.5, §2.6, §3 |
+| **3. Agente IA** ✅ | Workers AI con tools, guardrails, validador, simulador en el panel, evaluación de modelos | §2.5, §2.6, §3 |
 | **4. CRM** 🟡 | Panel web ya en dev (inicio, cotizador, inventario, planes, prospectos). Login con usuarios y roles listo. Falta: pipeline, bandeja, toma de control, asignación, notificaciones | §2.9, §2.10, §2.12 |
 | **5. Automatización** | Citas, recordatorios, seguimientos con Workflows | §2.7, §2.8 |
 | **6. Demo** | Datos de demo + número de pruebas + guion | §7 |
