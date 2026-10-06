@@ -39,6 +39,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Migraciones D1
         run: pnpm --filter @lynna/api db:migrate:${{ inputs.environment }}
+      - name: Verificar que no queden migraciones pendientes
+        # Nunca desplegar código contra una base desactualizada (un fallo silencioso de la migración lo permitiría).
+        run: |
+          out=$(pnpm --filter @lynna/api exec wrangler d1 migrations list DB --env ${{ inputs.environment }} --remote 2>&1)
+          echo "$out"
+          echo "$out" | grep -q "No migrations to apply" || { echo "::error::Quedaron migraciones pendientes en ${{ inputs.environment }}."; exit 1; }
       - name: Deploy
         run: pnpm --filter @lynna/api deploy:${{ inputs.environment }}
       - name: Health check
