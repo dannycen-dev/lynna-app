@@ -105,17 +105,17 @@
 - [ ] Opcional: sincronización con Google Calendar del vendedor.
 
 ### 2.9 Asignación de prospectos a vendedores
-- [ ] Reglas: round-robin por desarrollo, por carga de trabajo o manual.
-- [ ] Asignación atómica (transacción D1) para evitar dos vendedores en el mismo prospecto.
-- [ ] Reasignación automática si el vendedor no atiende en X minutos.
+- [x] Reglas: round-robin por desarrollo, por carga de trabajo o manual. — _en turno (round-robin) o manual, configurable; "por desarrollo" y "por carga" quedan como mejora_
+- [x] Asignación atómica (transacción D1) para evitar dos vendedores en el mismo prospecto. — _una sola sentencia UPDATE … RETURNING_
+- [x] Reasignación automática si el vendedor no atiende en X minutos. — _cron; minutos configurables (30), máximo 2 reasignaciones_
 
 ### 2.10 Notificaciones al vendedor cuando hay interés de compra
 - [x] Disparadores de **intención de compra** (ver §3.2) → notificación inmediata. — _cada escalamiento crea un aviso_
-- [ ] Canales: plantilla WhatsApp al vendedor + notificación en el panel (WebSocket vía DO) + correo. — _hoy: campana en el panel (consulta cada 10 s); WhatsApp al vendedor y correo pendientes_
+- [ ] Canales: plantilla WhatsApp al vendedor + notificación en el panel (WebSocket vía DO) + correo. — _hecho: campana en el panel (cada 10 s) para traspasos y asignaciones; faltan WhatsApp al vendedor, correo y tiempo real_
 - [x] La notificación incluye resumen de la conversación, score y lote(s) de interés. — _título + detalle del escalamiento; enlace a la ficha_
 
 ### 2.11 Control de disponibilidad de terrenos
-- [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _hoy vía API de administración; panel en Fase 4_
+- [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _desde el panel (Inventario → Cambiar estado), con motivo y auditoría_
 - [x] La IA consulta disponibilidad **en cada respuesta** que mencione un lote (sin caché en el prompt).
 - [ ] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor. — _cron cada 15 min ya libera y audita; falta el aviso al vendedor (Fase 4)_
 - [x] Importación masiva de inventario (CSV/Excel) para cargar los proyectos del cliente. — _CSV con encabezados en español, `dryRun`, todo o nada_
@@ -125,9 +125,9 @@
 - [x] Pipeline kanban: Nuevo → Calificado → Cita agendada → Visitó → Negociación → Apartado → Vendido / Perdido. — _tablero con arrastre; "perdido" exige motivo_
 - [x] Ficha del prospecto con conversación completa de WhatsApp, notas, actividades y citas. — _conversación, datos, notas e historial; citas en Fase 5_
 - [x] **Bandeja de conversaciones**: el vendedor puede tomar el control (la IA se pausa en esa conversación) y devolverlo. — _tomar/devolver desde la ficha; la IA se pausa_
-- [ ] Filtros por vendedor, desarrollo, score y etapa; exportación CSV.
+- [ ] Filtros por vendedor, desarrollo, score y etapa; exportación CSV. — _hecho: filtro por vendedor y etapas en el tablero; faltan desarrollo/score y CSV_
 - [ ] Dashboard: prospectos por fuente, conversión por etapa, tiempo de primera respuesta, citas.
-- [ ] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo. — _login con usuarios y roles (admin/owner/manager/seller) ya en dev; falta filtrar prospectos por vendedor asignado_
+- [x] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo. — _API (404 en ajenos) e interfaz; también conversaciones y avisos_
 
 ### 2.13 WhatsApp Business por la API oficial
 - [x] Cloud API de Meta (sin intermediarios no oficiales).
@@ -218,11 +218,11 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 |---|---|---|
 | **0. Base** ✅ | Monorepo, Worker Hono, D1/Drizzle, webhook WhatsApp, CI con tests (auth → Fase 4) | §1 |
 | **1. Inventario** ✅ | Desarrollos, lotes, media en R2, motor de planes de pago, importación CSV, E2E con Playwright | §2.2, §2.4, §2.11 |
-| **2. WhatsApp** | Webhook, cola, DO, envío de medios, túnel local | §2.1, §2.3, §2.13 |
+| **2. WhatsApp** ⏭ | Webhook, cola y DO ya hechos. Falta: envío de medios, plantillas, aviso de privacidad. **Se deja al final** (decisión del 2026-10-06) | §2.1, §2.3, §2.13 |
 | **3. Agente IA** ✅ | Workers AI con tools, guardrails, validador, simulador en el panel, evaluación de modelos | §2.5, §2.6, §3 |
-| **4. CRM** 🟡 | Panel, login y roles, tablero, ficha, toma de conversación, notas y avisos listos. Falta: asignación a vendedores, permisos por vendedor, filtros/CSV, métricas | §2.9, §2.10, §2.12 |
+| **4. CRM** 🟡 | Hecho: panel, login y roles, tablero, ficha, toma de conversación, notas, avisos, asignación (turno/manual/reasignación) y permisos por vendedor. Falta: filtros completos, CSV, métricas | §2.9, §2.10, §2.12 |
 | **5. Automatización** | Citas, recordatorios, seguimientos con Workflows | §2.7, §2.8 |
-| **6. Demo** | Datos de demo + número de pruebas + guion | §7 |
+| **6. Demo** 🟡 | Hecho: usuarios por rol y CRM de demo en dev/stg, simulador del agente. Falta: número de WhatsApp y guion | §7 |
 | **7. Producción** | Deploy Cloudflare, dominio, onboarding del cliente | §8 |
 
 ---
@@ -266,3 +266,39 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] **Costos variables a transparentar**: tarifas de Meta por mensajes de plantilla (marketing/utility; las respuestas dentro de la ventana de 24 h son de servicio) — **verificar tarifas vigentes para México**; consumo de IA por conversación (medirlo en la demo).
 - [ ] **Tiempo estimado**: por definir tras estimar fases.
 - [ ] **Incluye**: configuración de WABA, carga de inventario, capacitación a vendedores, demo previa.
+
+
+---
+
+## 11. Estado y pendientes (fuente única, actualizado 2026-10-06)
+
+### Hecho fuera de las fases originales
+- [x] Entornos local / dev / stg / prod en la cuenta de Ignia, con D1, colas y secretos por entorno.
+- [x] Dominios: devlynna / stglynna / lynna.igniastudio.mx (Custom Domains, sin workers.dev).
+- [x] Pipeline: PR → pruebas + E2E; main → dev; tag v* → stg → prod (aprobación). `/health` verifica el esquema de la base.
+- [x] Login con usuarios y roles (admin, owner, manager, seller); cookie HttpOnly, bloqueo por intentos, anti-CSRF.
+- [x] Agente con Workers AI: Gemma 4 sin razonamiento + respaldo Mistral; eval 10/10 en 2.8 s (`pnpm eval:agent`).
+- [x] Datos de demo: `pnpm demo:users` (un usuario por rol) y `pnpm demo:crm` (12 prospectos) en dev y stg.
+
+### Pendientes sin WhatsApp (orden propuesto)
+- [ ] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel.
+- [ ] **Base de conocimiento** (§2.2): FAQ, requisitos para escriturar, formas de pago — textos aprobados por el cliente (Vectorize).
+- [ ] **Configuración por desarrolladora**: nombre del asistente, horario de atención, texto del aviso de privacidad, formas de pago.
+- [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
+- [ ] **Usuarios desde el panel**: alta, roles, desactivar, cambiar contraseña (hoy por script `pnpm user:create`).
+- [ ] **Apartado vencido**: avisar al vendedor cuando el cron libera un lote (§2.11).
+- [ ] **Seguimientos automáticos** (§2.7): secuencias con Workflows; el envío real depende de WhatsApp.
+- [ ] Avisos en tiempo real (Durable Object + WebSocket) en lugar de consulta cada 10 s.
+
+### Al final: WhatsApp real (Fase 2)
+- [ ] Credenciales de Meta (app secret, access token, phone_number_id) en dev/stg/prod.
+- [ ] Envío de fotos, planos (PDF) y ubicación; plantillas aprobadas; aviso de privacidad al primer contacto.
+- [ ] Envío real de seguimientos y recordatorios de cita; aviso al vendedor por WhatsApp.
+
+### Pendientes del cliente / de Ignia (no son código)
+- [ ] `CLOUDFLARE_API_TOKEN` en GitHub (deploy automático; hoy se despliega a mano).
+- [ ] Activar **R2** en la cuenta de Ignia (fotos y planos en dev/stg/prod).
+- [ ] **Workers Paid** (USD 5/mes) antes de producción: más neuronas y modelos.
+- [ ] Primer release **v0.1.0** a producción (con aprobación).
+- [ ] Del cliente: inventario real (CSV), planes de pago, FAQ y textos legales, número de WhatsApp.
+- [ ] Propuesta comercial (§10): costos de implementación, mensualidad, costos variables de Meta y neuronas.
