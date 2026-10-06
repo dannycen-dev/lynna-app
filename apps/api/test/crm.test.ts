@@ -62,20 +62,30 @@ beforeEach(async () => {
 });
 
 describe("CRM", () => {
-  it("escalamiento → aviso al equipo, lectura independiente por usuario", async () => {
+  it("escalamiento: el aviso va al vendedor asignado; si no hay, al equipo (gerentes)", async () => {
     const laura = await login("laura@demo.mx");
     const miguel = await login("miguel@demo.mx");
-    const turn = await laura.json("/agent/simulator", "POST", { message: "Quiero comprar" });
-    expect(turn.escalation).toBe("compra");
 
-    const n = await laura.json("/notifications");
-    expect(n.unread).toBe(1);
-    expect(n.items[0]).toMatchObject({ kind: "handoff", title: "Laura González quiere comprar", prospectId: turn.prospect.id, readAt: null });
-
-    expect((await laura.call("/notifications/read", "POST", {})).status).toBe(204);
+    // Prospecto de Miguel (su simulador): solo Miguel recibe el aviso.
+    const own = await miguel.json("/agent/simulator", "POST", { message: "Quiero comprar" });
+    expect(own.escalation).toBe("compra");
+    const forMiguel = await miguel.json("/notifications");
+    expect(forMiguel.unread).toBe(1);
+    expect(forMiguel.items[0]).toMatchObject({ kind: "handoff", title: "Miguel Torres quiere comprar", readAt: null });
     expect((await laura.json("/notifications")).unread).toBe(0);
-    // El aviso es de equipo: Miguel lo sigue teniendo sin leer.
-    expect((await miguel.json("/notifications")).unread).toBe(1);
+
+    // Prospecto sin vendedor (simulador vía automatización, no se asigna): aviso de equipo,
+    // lo ve el gerente y no el vendedor.
+    await exports.default.fetch(`${T}/agent/simulator`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.ADMIN_API_TOKEN}`, "x-simulator-session": "equipo", "content-type": "application/json" },
+      body: JSON.stringify({ message: "¿Me haces un descuento?" }),
+    });
+    expect((await laura.json("/notifications")).items[0]).toMatchObject({ title: "Simulador pide un descuento" });
+
+    expect((await miguel.call("/notifications/read", "POST", {})).status).toBe(204);
+    expect((await miguel.json("/notifications")).unread).toBe(0);
+    expect((await laura.json("/notifications")).unread).toBe(1);
   });
 
   it("ficha: conversación, historial, etapa (perdido exige motivo) y notas", async () => {
@@ -140,5 +150,102 @@ describe("CRM", () => {
     await env.DB.prepare("INSERT INTO prospects (id, tenant_id, phone, stage, score, source, created_at, updated_at) VALUES ('p-otra', 'tnt-otra', '1', 'new', 0, 'whatsapp', 0, 0)").run();
     const laura = await login("laura@demo.mx");
     expect((await laura.call("/prospects/p-otra")).status).toBe(404);
+  });
+});
+
+describe("asignación y permisos", () => {
+  async function prospect(id: string, assigned: string | null, extra = "") {
+    await env.DB.prepare(
+      `INSERT INTO prospects (id, tenant_id, phone, name, stage, score, source, assigned_user_id, created_at, updated_at${extra ? ", " + extra.split("=")[0] : ""}) VALUES (?, 'tnt-demo', ?, ?, 'new', 0, 'whatsapp', ?, 0, 0${extra ? ", " + extra.split("=")[1] : ""})`,
+    )
+      .bind(id, `52199900${id.slice(-3)}`, `Prospecto ${id}`, assigned)
+      .run();
+  }
+
+  it("el vendedor solo ve sus prospectos; el gerente ve todos", async () => {
+    await createUser("u-ana", "ana@demo.mx", "seller", "Ana Hernández");
+    await prospect("p-001", "u-miguel");
+    await prospect("p-002", "u-ana");
+    await prospect("p-003", null);
+    const miguel = await login("miguel@demo.mx");
+    const laura = await login("laura@demo.mx");
+
+    expect((await miguel.json("/prospects")).map((p: { id: string }) => p.id)).toEqual(["p-001"]);
+    expect((await laura.json("/prospects")).map((p: { id: string }) => p.id).sort()).toEqual(["p-001", "p-002", "p-003"]);
+    expect((await miguel.call("/prospects/p-002")).status).toBe(404);
+    expect((await miguel.call("/prospects/p-002/stage", "PATCH", { stage: "qualified" })).status).toBe(404);
+    expect((await laura.json("/prospects/p-001")).prospect.assignedName).toBe("Miguel Torres");
+  });
+
+  it("reparto en turno al llegar un prospecto por WhatsApp (round-robin entre vendedores)", async () => {
+    await createUser("u-ana", "ana@demo.mx", "seller", "Ana Hernández");
+    const { processInboundEvent } = await import("../src/whatsapp/inbound");
+    const message = (from: string, wamid: string) => ({
+      kind: "message" as const,
+      phoneNumberId: "DEMO_PHONE_NUMBER_ID",
+      from,
+      wamid,
+      timestamp: Date.now(),
+      type: "text",
+      text: "Hola",
+    });
+    for (const [i, phone] of ["5219990000001", "5219990000002", "5219990000003"].entries()) {
+      await processInboundEvent(message(phone, `w-rr-${i}`), { ...env, AUTO_REPLY_MODE: "off" });
+    }
+    const rows = await env.DB.prepare("SELECT phone, assigned_user_id FROM prospects ORDER BY phone").all<{ phone: string; assigned_user_id: string }>();
+    const owners = rows.results.map((r) => r.assigned_user_id);
+    // Se alternan: nadie recibe dos seguidos mientras el otro tiene menos.
+    expect(new Set(owners.slice(0, 2)).size).toBe(2);
+    expect(owners.every(Boolean)).toBe(true);
+    const assignedNotifications = await env.DB.prepare("SELECT count(*) n FROM notifications WHERE kind = 'assignment'").first<{ n: number }>();
+    expect(assignedNotifications!.n).toBe(3);
+  });
+
+  it("modo manual y vendedor que no recibe prospectos", async () => {
+    const laura = await login("laura@demo.mx");
+    const { processInboundEvent } = await import("../src/whatsapp/inbound");
+    const msg = (from: string) => ({ kind: "message" as const, phoneNumberId: "DEMO_PHONE_NUMBER_ID", from, wamid: `w-${from}`, timestamp: Date.now(), type: "text", text: "Hola" });
+
+    // Miguel no recibe prospectos → queda sin asignar (para el gerente).
+    expect((await laura.call("/team/u-miguel", "PATCH", { receivesLeads: false })).status).toBe(200);
+    await processInboundEvent(msg("5219991111111"), env);
+    expect((await env.DB.prepare("SELECT assigned_user_id a FROM prospects").first<{ a: string | null }>())!.a).toBeNull();
+
+    // Modo manual: no se reparte aunque haya vendedores disponibles.
+    await laura.call("/team/u-miguel", "PATCH", { receivesLeads: true });
+    expect(await laura.json("/settings/assignment", "PATCH", { assignmentMode: "manual" })).toMatchObject({ assignmentMode: "manual" });
+    await processInboundEvent(msg("5219992222222"), env);
+    expect((await env.DB.prepare("SELECT count(*) n FROM prospects WHERE assigned_user_id IS NOT NULL").first<{ n: number }>())!.n).toBe(0);
+
+    // El gerente asigna a mano; el vendedor no puede.
+    const id = (await env.DB.prepare("SELECT id FROM prospects LIMIT 1").first<{ id: string }>())!.id;
+    expect(await laura.json(`/prospects/${id}/assign`, "PATCH", { userId: "u-miguel" })).toMatchObject({ assignedUserId: "u-miguel" });
+    const miguel = await login("miguel@demo.mx");
+    expect((await miguel.call(`/prospects/${id}/assign`, "PATCH", { userId: null })).status).toBe(403);
+    expect((await miguel.call("/settings/assignment", "PATCH", { assignmentMode: "round_robin" })).status).toBe(403);
+  });
+
+  it("reasignación automática si el vendedor no atiende a tiempo (máximo 2)", async () => {
+    await createUser("u-ana", "ana@demo.mx", "seller", "Ana Hernández");
+    const old = Date.now() - 60 * 60_000;
+    await prospect("p-100", "u-miguel", `handoff_at, assigned_at=${old}, ${old}`);
+    await env.DB.prepare("UPDATE prospects SET handoff_at = ?, assigned_at = ? WHERE id = 'p-100'").bind(old, old).run();
+    const { reassignStale } = await import("../src/crm/assignment");
+    const { getDb } = await import("../src/db/client");
+
+    const first = await reassignStale(getDb(env.DB));
+    expect(first).toEqual([{ prospectId: "p-100", from: "u-miguel", to: "u-ana" }]);
+    // Recién reasignado: no se mueve de nuevo hasta que pase otra vez el plazo.
+    expect(await reassignStale(getDb(env.DB))).toEqual([]);
+    // Si el nuevo vendedor toma la conversación, ya no se reasigna.
+    await env.DB.prepare("UPDATE prospects SET assigned_at = ? WHERE id = 'p-100'").bind(old).run();
+    await env.DB.prepare(
+      "INSERT INTO conversations (id, tenant_id, prospect_id, wa_account_id, ai_paused, taken_by_user_id, taken_at, created_at) VALUES ('c-100', 'tnt-demo', 'p-100', 'wa-demo', 1, 'u-ana', ?, 0)",
+    )
+      .bind(Date.now())
+      .run();
+    expect(await reassignStale(getDb(env.DB))).toEqual([]);
+    const audit = await env.DB.prepare("SELECT action FROM audit_log WHERE entity_id = 'p-100'").all<{ action: string }>();
+    expect(audit.results.map((a) => a.action)).toContain("reassigned");
   });
 });

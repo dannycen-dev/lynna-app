@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Context } from "hono";
 import { z } from "zod";
 import { respondToConversation, defaultLlm } from "../agent/respond";
+import { assignProspect } from "../crm/assignment";
 import type { AuthVariables } from "../auth/middleware";
 import { getDb } from "../db/client";
 import { aiAuditLog, auditLog, conversations, MESSAGE_STATUS_RANK, messages, prospects, tenants, waAccounts } from "../db/schema";
@@ -68,6 +69,12 @@ export async function simulatorSend(c: Ctx) {
     .values({ tenantId, phone, profileName: name, source: "simulator" })
     .onConflictDoUpdate({ target: [prospects.tenantId, prospects.phone], set: { updatedAt: now } })
     .returning({ id: prospects.id });
+  // La conversación de prueba es del usuario que la crea (un vendedor solo ve las suyas).
+  const current = await db.select({ assigned: prospects.assignedUserId }).from(prospects).where(eq(prospects.id, prospect!.id)).get();
+  if (p.kind === "user" && !current?.assigned) {
+    await assignProspect(db, { tenantId, prospectId: prospect!.id, userId: p.user.id, actor: "system", action: "assigned", reason: "Simulador", notify: false });
+  }
+
   const [conversation] = await db
     .insert(conversations)
     .values({ tenantId, prospectId: prospect!.id, waAccountId: account.id, lastInboundAt: now })

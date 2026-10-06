@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { USERS } from "../lib/env";
+import { inboundText, randomMxPhone, signMeta } from "../lib/meta";
 
 // Pruebas de navegador del panel. Escriben datos: solo corren en local/CI (no son @smoke).
 // SCREENSHOT_DIR=/ruta guarda capturas de cada pantalla para revisión visual.
@@ -229,6 +230,39 @@ test("CRM: aviso de compra → ficha → tomar la conversación → nota → eta
     await card.dragTo(page.getByRole("region", { name: "Cita agendada" }));
     await expect(page.getByRole("region", { name: "Cita agendada" }).getByRole("article", { name: /Vendedor E2E/ })).toBeVisible();
   });
+});
+
+test("asignación: el gerente ve el equipo, cambia el modo y reasigna; el vendedor ve solo lo suyo", async ({ page, browser, request }) => {
+  await login(page, "admin");
+  await sidebar(page).getByRole("link", { name: "Configuración" }).click();
+  await expect(page.getByRole("heading", { name: "Configuración" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /Vendedor E2E/ }).first()).toBeVisible();
+  await page.getByRole("radio", { name: /Manual/ }).check();
+  await expect(page.getByRole("radio", { name: /Manual/ })).toBeChecked();
+  await shot(page, "18-configuracion");
+  await page.getByRole("radio", { name: /En turno/ }).check();
+
+  // Un prospecto real por WhatsApp entra y se reparte al único vendedor en turno.
+  const { body } = inboundText(randomMxPhone(), "Hola, quiero información");
+  const sent = await request.post("/whatsapp/webhook", { headers: { "content-type": "application/json", "x-hub-signature-256": signMeta(body) }, data: body });
+  expect(sent.status()).toBe(200);
+  await sidebar(page).getByRole("link", { name: "Prospectos" }).click();
+  await page.getByRole("tab", { name: "Lista" }).click();
+  await page.getByLabel("Filtrar por vendedor").selectOption({ label: "Vendedor E2E" });
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole("tab", { name: "Lista" }).click();
+    await page.getByLabel("Filtrar por vendedor").selectOption({ label: "Vendedor E2E" });
+    await expect(page.getByRole("cell", { name: /Prospecto E2E/ }).first()).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
+  // El vendedor no ve el selector de vendedor ni prospectos ajenos.
+  const sellerPage = await browser.newPage();
+  await login(sellerPage, "seller");
+  await sidebar(sellerPage).getByRole("link", { name: "Prospectos" }).click();
+  await expect(sellerPage.getByRole("heading", { name: "Prospectos" })).toBeVisible();
+  await expect(sellerPage.getByLabel("Filtrar por vendedor")).toHaveCount(0);
+  await sellerPage.close();
 });
 
 test("móvil: el menú lateral se abre como cajón", async ({ page }) => {

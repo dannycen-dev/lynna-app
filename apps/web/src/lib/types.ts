@@ -167,9 +167,22 @@ export type Prospect = {
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
   assignedUserId: string | null;
+  assignedName: string | null;
   updatedAt: number;
   messageCount: number;
 };
+
+export type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  receivesLeads: boolean;
+  lastAssignedAt: number | null;
+};
+
+export type AssignmentSettings = { assignmentMode: "round_robin" | "manual"; reassignAfterMinutes: number };
 
 export type ProspectStage = "new" | "qualified" | "appointment" | "visited" | "negotiation" | "ready_to_buy" | "reserved" | "won" | "lost";
 

@@ -2,7 +2,8 @@ import { and, asc, desc, eq, gte, inArray, isNull, notExists, or, sql } from "dr
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { canSendWhatsApp } from "../agent/respond";
-import { actorOf, type AuthVariables } from "../auth/middleware";
+import { actorOf, type AuthVariables, type Principal } from "../auth/middleware";
+import { assignProspect, isSeller, prospectScope, tenantUsers } from "../crm/assignment";
 import { getDb, type Db } from "../db/client";
 import {
   aiAuditLog,
@@ -35,11 +36,12 @@ async function readBody<T extends z.ZodType>(c: { req: { json: () => Promise<unk
   return schema.safeParse(await c.req.json().catch(() => null));
 }
 
-async function loadProspect(db: Db, tenantId: string, prospectId: string) {
+/** Prospecto visible para quien pregunta (un vendedor solo los suyos; si no, 404). */
+async function loadProspect(db: Db, tenantId: string, prospectId: string, principal: Principal) {
   return db
     .select()
     .from(prospects)
-    .where(and(eq(prospects.id, prospectId), eq(prospects.tenantId, tenantId)))
+    .where(and(eq(prospects.id, prospectId), eq(prospects.tenantId, tenantId), prospectScope(principal)))
     .get();
 }
 
@@ -48,7 +50,7 @@ async function loadProspect(db: Db, tenantId: string, prospectId: string) {
 crm.get("/prospects/:id", async (c) => {
   const db = getDb(c.env.DB);
   const tenantId = c.var.tenant.id;
-  const prospect = await loadProspect(db, tenantId, c.req.param("id"));
+  const prospect = await loadProspect(db, tenantId, c.req.param("id"), c.var.principal);
   if (!prospect) return c.json({ error: "not_found" }, 404);
 
   const conversation = await db
@@ -86,8 +88,12 @@ crm.get("/prospects/:id", async (c) => {
     ? Object.fromEntries((await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, actorIds))).map((u) => [u.id, u.name]))
     : {};
 
+  const assigned = prospect.assignedUserId
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, prospect.assignedUserId)).get()
+    : undefined;
+
   return c.json({
-    prospect,
+    prospect: { ...prospect, assignedName: assigned?.name ?? null },
     conversation: conversation ? { ...conversation.conversation, takenByName: conversation.takenByName } : null,
     messages: msgs,
     notes,
@@ -110,7 +116,7 @@ crm.patch("/prospects/:id/stage", async (c) => {
   if (stage === "lost" && !reason) return c.json({ error: "validation", message: "Indica por qué se perdió." }, 400);
 
   const db = getDb(c.env.DB);
-  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"));
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
   if (!prospect) return c.json({ error: "not_found" }, 404);
   if (prospect.stage === stage) return c.json(prospect);
 
@@ -134,7 +140,7 @@ crm.post("/prospects/:id/notes", async (c) => {
   const parsed = await readBody(c, z.object({ body: z.string().trim().min(1).max(4000) }));
   if (!parsed.success) return c.json({ error: "validation", message: "Escribe la nota." }, 400);
   const db = getDb(c.env.DB);
-  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"));
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
   if (!prospect) return c.json({ error: "not_found" }, 404);
   const [note] = await db
     .insert(prospectNotes)
@@ -145,19 +151,19 @@ crm.post("/prospects/:id/notes", async (c) => {
 
 // ── Tomar / devolver la conversación ────────────────────────────────────────────
 
-async function loadConversation(db: Db, tenantId: string, conversationId: string) {
+async function loadConversation(db: Db, tenantId: string, conversationId: string, principal: Principal) {
   return db
     .select({ conversation: conversations, prospect: prospects, account: waAccounts })
     .from(conversations)
     .innerJoin(prospects, eq(prospects.id, conversations.prospectId))
     .innerJoin(waAccounts, eq(waAccounts.id, conversations.waAccountId))
-    .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)))
+    .where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId), prospectScope(principal)))
     .get();
 }
 
 async function setTakeover(c: Context<AppEnv>, take: boolean) {
   const db = getDb(c.env.DB);
-  const row = await loadConversation(db, c.var.tenant.id, c.req.param("id") ?? "");
+  const row = await loadConversation(db, c.var.tenant.id, c.req.param("id") ?? "", c.var.principal);
   if (!row) return c.json({ error: "not_found" }, 404);
   const userId = userIdOf(c);
   const [updated] = await db.batch([
@@ -186,7 +192,7 @@ crm.post("/conversations/:id/messages", async (c) => {
   const parsed = await readBody(c, z.object({ body: z.string().trim().min(1).max(4000) }));
   if (!parsed.success) return c.json({ error: "validation", message: "Escribe el mensaje." }, 400);
   const db = getDb(c.env.DB);
-  const row = await loadConversation(db, c.var.tenant.id, c.req.param("id"));
+  const row = await loadConversation(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
   if (!row) return c.json({ error: "not_found" }, 404);
   const { conversation, prospect, account } = row;
   if (prospect.optedOutAt) return c.json({ error: "opted_out", message: "El prospecto pidió no recibir mensajes." }, 409);
@@ -254,13 +260,17 @@ crm.post("/conversations/:id/messages", async (c) => {
 
 // ── Avisos ────────────────────────────────────────────────────────────────────
 
-/** Avisos visibles para el usuario: los suyos y los de todo el equipo, de los últimos 30 días. */
-function visibleTo(tenantId: string, userId: string | null) {
+/**
+ * Avisos visibles (últimos 30 días): un vendedor solo los suyos; gerente/dueño/admin los suyos y
+ * los de equipo (prospectos sin vendedor).
+ */
+function visibleTo(tenantId: string, principal: Principal) {
   const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const userId = principal.kind === "user" ? principal.user.id : null;
   return and(
     eq(notifications.tenantId, tenantId),
     gte(notifications.createdAt, since),
-    userId ? or(isNull(notifications.userId), eq(notifications.userId, userId)) : undefined,
+    userId ? (isSeller(principal) ? eq(notifications.userId, userId) : or(isNull(notifications.userId), eq(notifications.userId, userId))) : undefined,
   );
 }
 
@@ -279,14 +289,14 @@ crm.get("/notifications", async (c) => {
     })
     .from(notifications)
     .leftJoin(notificationReads, and(eq(notificationReads.notificationId, notifications.id), eq(notificationReads.userId, userId ?? "")))
-    .where(visibleTo(c.var.tenant.id, userId))
+    .where(visibleTo(c.var.tenant.id, c.var.principal))
     .orderBy(desc(notifications.createdAt))
     .limit(30);
   const unread = userId
     ? await db.$count(
         notifications,
         and(
-          visibleTo(c.var.tenant.id, userId),
+          visibleTo(c.var.tenant.id, c.var.principal),
           notExists(
             db
               .select({ one: sql`1` })
@@ -308,7 +318,7 @@ crm.post("/notifications/read", async (c) => {
   const targets = await db
     .select({ id: notifications.id })
     .from(notifications)
-    .where(and(visibleTo(c.var.tenant.id, userId), parsed.data.ids?.length ? inArray(notifications.id, parsed.data.ids) : undefined))
+    .where(and(visibleTo(c.var.tenant.id, c.var.principal), parsed.data.ids?.length ? inArray(notifications.id, parsed.data.ids) : undefined))
     .limit(100);
   if (targets.length) {
     const now = Date.now();
@@ -318,4 +328,66 @@ crm.post("/notifications/read", async (c) => {
       .onConflictDoNothing();
   }
   return c.body(null, 204);
+});
+
+// ── Asignación, equipo y configuración ─────────────────────────────────────────
+
+crm.patch("/prospects/:id/assign", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente puede reasignar prospectos." }, 403);
+  const parsed = await readBody(c, z.object({ userId: z.string().nullable(), reason: z.string().trim().max(300).optional() }));
+  if (!parsed.success) return c.json({ error: "validation" }, 400);
+  const db = getDb(c.env.DB);
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
+  if (!prospect) return c.json({ error: "not_found" }, 404);
+  if (parsed.data.userId) {
+    const target = await db
+      .select({ id: users.id, role: users.role, active: users.active })
+      .from(users)
+      .where(and(eq(users.id, parsed.data.userId), eq(users.tenantId, c.var.tenant.id)))
+      .get();
+    if (!target?.active) return c.json({ error: "validation", message: "Ese usuario no pertenece al equipo o está inactivo." }, 400);
+  }
+  if (prospect.assignedUserId === parsed.data.userId) return c.json(prospect);
+  const updated = await assignProspect(db, {
+    tenantId: c.var.tenant.id,
+    prospectId: prospect.id,
+    userId: parsed.data.userId,
+    actor: actorOf(c.var.principal),
+    action: parsed.data.userId ? (prospect.assignedUserId ? "reassigned" : "assigned") : "unassigned",
+    ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+  });
+  return c.json(updated);
+});
+
+crm.get("/team", async (c) => c.json(await tenantUsers(getDb(c.env.DB), c.var.tenant.id)));
+
+crm.patch("/team/:userId", async (c) => {
+  const parsed = await readBody(c, z.object({ receivesLeads: z.boolean() }));
+  if (!parsed.success) return c.json({ error: "validation" }, 400);
+  const db = getDb(c.env.DB);
+  const [updated] = await db
+    .update(users)
+    .set({ receivesLeads: parsed.data.receivesLeads })
+    .where(and(eq(users.id, c.req.param("userId")), eq(users.tenantId, c.var.tenant.id)))
+    .returning({ id: users.id, receivesLeads: users.receivesLeads });
+  if (!updated) return c.json({ error: "not_found" }, 404);
+  return c.json(updated);
+});
+
+crm.get("/settings/assignment", (c) =>
+  c.json({ assignmentMode: c.var.tenant.assignmentMode, reassignAfterMinutes: c.var.tenant.reassignAfterMinutes }),
+);
+
+crm.patch("/settings/assignment", async (c) => {
+  const parsed = await readBody(
+    c,
+    z.object({ assignmentMode: z.enum(["round_robin", "manual"]).optional(), reassignAfterMinutes: z.int().min(0).max(24 * 60).optional() }),
+  );
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const db = getDb(c.env.DB);
+  const [updated] = await db.batch([
+    db.update(tenants).set(parsed.data).where(eq(tenants.id, c.var.tenant.id)).returning({ assignmentMode: tenants.assignmentMode, reassignAfterMinutes: tenants.reassignAfterMinutes }),
+    auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "tenant", entityId: c.var.tenant.id, action: "assignment_settings", data: parsed.data }),
+  ]);
+  return c.json(updated[0]);
 });

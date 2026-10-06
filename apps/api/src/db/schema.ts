@@ -28,6 +28,10 @@ export const tenants = sqliteTable("tenants", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  // Asignación de prospectos: en turno automático o manual por un gerente.
+  assignmentMode: text("assignment_mode", { enum: ["round_robin", "manual"] }).notNull().default("round_robin"),
+  // Si un prospecto pidió asesor y nadie tomó la conversación en estos minutos, pasa al siguiente vendedor (0 = nunca).
+  reassignAfterMinutes: integer("reassign_after_minutes").notNull().default(30),
   createdAt: createdAt(),
 });
 
@@ -175,6 +179,8 @@ export const prospects = sqliteTable(
     score: integer("score").notNull().default(0),
     budgetCents: integer("budget_cents"),
     assignedUserId: text("assigned_user_id"),
+    assignedAt: integer("assigned_at"),
+    reassignCount: integer("reassign_count").notNull().default(0),
     // Calificación (la IA extrae los datos con la tool actualizar_prospecto; el score lo calcula el código).
     city: text("city"),
     purpose: text("purpose", { enum: ["vivienda", "inversion", "otro"] }),
@@ -286,6 +292,9 @@ export const users = sqliteTable(
     passwordHash: text("password_hash").notNull(),
     role: text("role", { enum: USER_ROLES }).notNull(),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
+    // Vendedores: si recibe prospectos nuevos en el reparto (false = vacaciones, saturado…).
+    receivesLeads: integer("receives_leads", { mode: "boolean" }).notNull().default(true),
+    lastAssignedAt: integer("last_assigned_at"),
     lastLoginAt: integer("last_login_at"),
     createdAt: createdAt(),
   },

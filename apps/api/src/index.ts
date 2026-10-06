@@ -4,6 +4,7 @@ import { getDb } from "./db/client";
 import { schemaStatus } from "./db/schema-version";
 import { log } from "./lib/log";
 import { purgeExpiredSessions } from "./auth/session";
+import { reassignStale } from "./crm/assignment";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
 import { publicMedia } from "./routes/media";
@@ -40,6 +41,8 @@ export default {
     const db = getDb(env.DB);
     const released = await releaseExpiredReservations(db);
     if (released.length > 0) log("info", "cron.reservations_released", { count: released.length });
+    const reassigned = await reassignStale(db);
+    if (reassigned.length > 0) log("info", "cron.prospects_reassigned", { count: reassigned.length });
     await purgeExpiredSessions(db);
   },
 } satisfies ExportedHandler<Env, InboundEvent>;

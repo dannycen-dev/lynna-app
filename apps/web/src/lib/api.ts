@@ -13,6 +13,8 @@ import type {
   Prospect,
   Simulation,
   AppNotification,
+  AssignmentSettings,
+  TeamMember,
   ProspectDetail,
   ProspectStage,
   SimulatorHistory,
@@ -254,5 +256,50 @@ export function useMarkNotificationsRead() {
   return useMutation({
     mutationFn: (ids?: string[]) => call("/notifications/read", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
     onSuccess: () => invalidate("notifications"),
+  });
+}
+
+// ── Asignación y equipo ────────────────────────────────────────────────────────
+
+export const useTeam = () => useApiQuery<TeamMember[]>(["team"], "/team");
+export const useAssignmentSettings = () => useApiQuery<AssignmentSettings>(["assignment-settings"], "/settings/assignment");
+
+export function useAssign() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string | null }) =>
+      call(`/prospects/${encodeURIComponent(id)}/assign`, { method: "PATCH", body: JSON.stringify({ userId }) }),
+    onSuccess: () => invalidate("prospect", "prospects"),
+  });
+}
+
+export function useUpdateAssignmentSettings() {
+  const { call, tenant } = useApi();
+  const qc = useQueryClient();
+  const key = [tenant, "assignment-settings"];
+  return useMutation({
+    mutationFn: (data: Partial<AssignmentSettings>) => call<AssignmentSettings>("/settings/assignment", { method: "PATCH", body: JSON.stringify(data) }),
+    // Optimista: el control cambia al instante; si el servidor falla, se revierte.
+    onMutate: async (data) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<AssignmentSettings>(key);
+      if (previous) qc.setQueryData(key, { ...previous, ...data });
+      return { previous };
+    },
+    onError: (_err, _data, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSuccess: (saved) => qc.setQueryData(key, saved),
+  });
+}
+
+export function useUpdateTeamMember() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, receivesLeads }: { id: string; receivesLeads: boolean }) =>
+      call(`/team/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ receivesLeads }) }),
+    onSuccess: () => invalidate("team"),
   });
 }

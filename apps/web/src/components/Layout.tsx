@@ -39,7 +39,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: "/planes", label: "Planes de pago", icon: <WalletCards size={18} /> },
     ],
   },
-  { section: "Ajustes", items: [{ to: "/ajustes", label: "Configuración", icon: <Settings size={18} />, soon: true }] },
+  { section: "Ajustes", items: [{ to: "/ajustes", label: "Configuración", icon: <Settings size={18} /> }] },
 ];
 
 const ENV_LABEL: Record<string, string> = { localhost: "local", "127.0.0.1": "local" };

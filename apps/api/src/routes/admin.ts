@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { importLots, parseLotsCsv } from "../catalog/lots-import";
@@ -16,6 +17,7 @@ import {
   prospects,
   ROUNDING_ABSORBERS,
   tenants,
+  users,
   VALUE_TYPES,
 } from "../db/schema";
 import { PlanError, todayIn, validatePlan } from "../financing";
@@ -23,6 +25,7 @@ import { actorOf, authenticate, canAccessTenant, canWrite, type AuthVariables } 
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
+import { prospectScope } from "../crm/assignment";
 import { crm } from "./crm";
 import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
@@ -114,7 +117,7 @@ admin.get("/tenants/:tenant/summary", async (c) => {
         newLast24h: sql<number>`coalesce(sum(${prospects.createdAt} >= ${since}), 0)`,
       })
       .from(prospects)
-      .where(eq(prospects.tenantId, tenantId))
+      .where(and(eq(prospects.tenantId, tenantId), prospectScope(c.var.principal)))
       .get(),
   ]);
   return c.json({ tenant: c.var.tenant, developments: byDevelopment, prospects: prospectTotals });
@@ -318,6 +321,8 @@ admin.get("/tenants/:tenant/developments/:development/payment-plans", async (c) 
 
 // ── Prospectos (base del CRM de la Fase 4) ─────────────────────────────────────
 
+const assignee = alias(users, "assignee");
+
 admin.get("/tenants/:tenant/prospects", async (c) => {
   const db = getDb(c.env.DB);
   const rows = await db
@@ -343,13 +348,15 @@ admin.get("/tenants/:tenant/prospects", async (c) => {
       takenByUserId: conversations.takenByUserId,
       lastOutboundAt: conversations.lastOutboundAt,
       assignedUserId: prospects.assignedUserId,
+      assignedName: assignee.name,
       updatedAt: prospects.updatedAt,
       lastInboundAt: conversations.lastInboundAt,
       messageCount: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messages.conversationId} = ${conversations.id})`,
     })
     .from(prospects)
     .leftJoin(conversations, eq(conversations.prospectId, prospects.id))
-    .where(eq(prospects.tenantId, c.var.tenant.id))
+    .leftJoin(assignee, eq(assignee.id, prospects.assignedUserId))
+    .where(and(eq(prospects.tenantId, c.var.tenant.id), prospectScope(c.var.principal)))
     .orderBy(desc(conversations.lastInboundAt))
     .limit(200);
   return c.json(rows);

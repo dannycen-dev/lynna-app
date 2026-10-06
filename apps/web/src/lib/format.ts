@@ -107,7 +107,21 @@ export const HISTORY_LABEL: Record<string, string> = {
   taken_over: "Tomó la conversación",
   returned_to_ai: "Devolvió la conversación a la IA",
   opted_out: "El prospecto pidió no recibir mensajes",
+  assigned: "Asignó vendedor",
+  reassigned: "Reasignó vendedor",
+  unassigned: "Quitó la asignación",
 };
+
+export const ROLE_LABEL: Record<string, string> = { admin: "Ignia", owner: "Dueño", manager: "Gerente", seller: "Vendedor" };
+
+export function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
 
 /** "hace 5 min", "hace 2 h", "ayer"… */
 export function timeAgo(ms: number, now = Date.now()): string {

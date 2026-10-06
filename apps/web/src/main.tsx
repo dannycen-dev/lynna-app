@@ -5,6 +5,7 @@ import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from "re
 import { Layout } from "./components/Layout";
 import { Empty, Spinner } from "./components/ui";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
+import { Configuracion } from "./pages/Configuracion";
 import { Home } from "./pages/Home";
 import { InventarioDevelopment, InventarioList } from "./pages/Inventario";
 import { Login } from "./pages/Login";
@@ -66,6 +67,7 @@ const router = createBrowserRouter([
       { path: "prospectos", element: <Prospectos /> },
       { path: "prospectos/:id", element: <ProspectoFicha /> },
       { path: "agente", element: <Simulador /> },
+      { path: "ajustes", element: <Configuracion /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],
   },

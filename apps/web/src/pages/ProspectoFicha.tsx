@@ -2,7 +2,7 @@ import { ArrowLeft, Bot, History, MessageCircle, Send, StickyNote, UserCheck, Us
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 import { Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useAddNote, useChangeStage, useProspect, useSendHumanMessage, useTakeover } from "../lib/api";
+import { useAddNote, useAssign, useChangeStage, useProspect, useSendHumanMessage, useTakeover, useTeam } from "../lib/api";
 import {
   dateTime,
   HANDOFF_LABEL,
@@ -16,7 +16,7 @@ import {
   timeAgo,
 } from "../lib/format";
 import { useSession } from "../lib/session";
-import type { HistoryItem, Message, ProspectStage } from "../lib/types";
+import type { HistoryItem, Message, Prospect, ProspectStage } from "../lib/types";
 import { displayName, formatPhone } from "./Prospectos";
 
 const AUTHOR_LABEL: Record<Message["author"], string> = { prospect: "Prospecto", ai: "IA", user: "Asesor", system: "Sistema" };
@@ -83,6 +83,10 @@ export function ProspectoFicha() {
             </div>
             <div className="card__body">
               <dl className="dl">
+                <dt>Vendedor</dt>
+                <dd>
+                  <AssignSelect id={prospect.id} assignedUserId={prospect.assignedUserId} assignedName={prospect.assignedName} />
+                </dd>
                 <dt>Nombre</dt>
                 <dd>{prospect.name ?? "—"}</dd>
                 <dt>Perfil de WhatsApp</dt>
@@ -109,6 +113,35 @@ export function ProspectoFicha() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function AssignSelect({ id, assignedUserId, assignedName }: { id: string; assignedUserId: string | null; assignedName: string | null }) {
+  const { me } = useSession();
+  const team = useTeam();
+  const assign = useAssign();
+  if (me?.user.role === "seller") return <>{assignedName ?? "Sin asignar"}</>;
+  return (
+    <>
+      <select
+        className="select"
+        style={{ height: 32, maxWidth: 200 }}
+        aria-label="Asignar vendedor"
+        value={assignedUserId ?? ""}
+        disabled={assign.isPending}
+        onChange={(e) => assign.mutate({ id, userId: e.target.value || null })}
+      >
+        <option value="">Sin asignar</option>
+        {team.data
+          ?.filter((u) => u.active && u.role !== "admin")
+          .map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+      </select>
+      <ErrorAlert error={assign.error} />
+    </>
   );
 }
 
@@ -279,6 +312,7 @@ function describe(h: HistoryItem): string {
     const reason = d.reason ? ` — ${String(d.reason)}` : "";
     return `${label}: ${STAGE_LABEL[String(d.from)] ?? d.from} → ${STAGE_LABEL[String(d.to)] ?? d.to}${reason}`;
   }
+  if (h.action === "assigned" || h.action === "reassigned") return `${label}${d.reason ? ` — ${String(d.reason)}` : ""}`;
   if (h.action === "handoff") return `${label}: ${HANDOFF_LABEL[String(d.reason)] ?? d.reason}${d.detail ? ` — ${String(d.detail)}` : ""}`;
   return label;
 }

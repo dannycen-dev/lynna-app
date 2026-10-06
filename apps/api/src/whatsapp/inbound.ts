@@ -1,4 +1,5 @@
 import { and, eq, lt, sql } from "drizzle-orm";
+import { autoAssignIfNeeded } from "../crm/assignment";
 import { getDb } from "../db/client";
 import { conversations, MESSAGE_STATUS_RANK, messages, prospects, waAccounts } from "../db/schema";
 import { log, maskPhone } from "../lib/log";
@@ -46,6 +47,9 @@ async function processMessage(ev: InboundMessageEvent, env: Env): Promise<void> 
       set: { profileName: sql`coalesce(excluded.profile_name, ${prospects.profileName})`, updatedAt: Date.now() },
     })
     .returning({ id: prospects.id });
+
+  // Reparto en turno: el prospecto nuevo queda con un vendedor (idempotente si ya tiene).
+  await autoAssignIfNeeded(db, tenantId, prospect!.id);
 
   const [conversation] = await db
     .insert(conversations)

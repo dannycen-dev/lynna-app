@@ -2,8 +2,9 @@ import { Bot, Columns3, List, MessageCircle, UserRoundCheck, Users } from "lucid
 import { useMemo, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useChangeStage, useProspects } from "../lib/api";
-import { dateTime, HANDOFF_LABEL, money, num, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
+import { useChangeStage, useProspects, useTeam } from "../lib/api";
+import { dateTime, HANDOFF_LABEL, initials, money, num, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
+import { useSession } from "../lib/session";
 import type { Prospect, ProspectStage } from "../lib/types";
 
 export function formatPhone(wa: string): string {
@@ -19,13 +20,45 @@ type View = "tablero" | "lista";
 export function Prospectos() {
   const prospects = useProspects();
   const navigate = useNavigate();
+  const { me } = useSession();
+  const isSellerUser = me?.user.role === "seller";
+  const team = useTeam();
   const [view, setView] = useState<View>("tablero");
+  const [owner, setOwner] = useState<string>("all"); // all | none | <userId>
+
+  const visible = useMemo(
+    () =>
+      (prospects.data ?? []).filter((p) => (owner === "all" ? true : owner === "none" ? !p.assignedUserId : p.assignedUserId === owner)),
+    [prospects.data, owner],
+  );
 
   return (
     <div className="page" style={{ maxWidth: view === "tablero" ? "none" : undefined }}>
       <PageHeader
         title="Prospectos"
-        subtitle="Llegan por WhatsApp (o del simulador del agente). La calificación la calcula el sistema con lo que el prospecto le contó a la IA."
+        subtitle={
+          isSellerUser
+            ? "Tus prospectos asignados. La calificación la calcula el sistema con lo que el prospecto le contó a la IA."
+            : "Llegan por WhatsApp (o del simulador del agente) y se reparten entre los vendedores. La calificación la calcula el sistema."
+        }
+        actions={
+          !isSellerUser && (
+            <label className="row" style={{ gap: 8 }}>
+              <span className="muted">Vendedor</span>
+              <select className="select" style={{ width: 220 }} value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Filtrar por vendedor">
+                <option value="all">Todos</option>
+                <option value="none">Sin asignar</option>
+                {team.data
+                  ?.filter((u) => u.active)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )
+        }
       />
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={view === "tablero"} className={`tabs__btn${view === "tablero" ? " active" : ""}`} onClick={() => setView("tablero")}>
@@ -42,7 +75,7 @@ export function Prospectos() {
           Aparecerán aquí en cuanto alguien escriba al número de WhatsApp conectado o pruebes el agente en el simulador.
         </Empty>
       )}
-      {prospects.data && prospects.data.length > 0 && (view === "tablero" ? <Board prospects={prospects.data} /> : <ProspectTable prospects={prospects.data} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
+      {prospects.data && prospects.data.length > 0 && (view === "tablero" ? <Board prospects={visible} /> : <ProspectTable prospects={visible} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
     </div>
   );
 }
@@ -142,6 +175,9 @@ function Board({ prospects }: { prospects: Prospect[] }) {
                       </div>
                       <div className="muted board__meta">
                         <MessageCircle size={12} /> {num(p.messageCount)} · {p.lastInboundAt ? timeAgo(p.lastInboundAt) : "sin mensajes"}
+                        <span className="board__owner" title={p.assignedName ? `Asignado a ${p.assignedName}` : "Sin asignar"}>
+                          {p.assignedName ? initials(p.assignedName) : "—"}
+                        </span>
                       </div>
                       {/* Alternativa al arrastre (teclado / móvil). */}
                       <label className="sr-only" htmlFor={`stage-${p.id}`}>
@@ -210,6 +246,7 @@ function ProspectTable({ prospects, onOpen }: { prospects: Prospect[]; onOpen: (
             <th>Etapa</th>
             <th className="right">Presupuesto</th>
             <th>Asesor</th>
+            <th>Vendedor</th>
             <th className="right">Mensajes</th>
             <th>Último mensaje</th>
           </tr>
@@ -237,6 +274,7 @@ function ProspectTable({ prospects, onOpen }: { prospects: Prospect[]; onOpen: (
               <td>{STAGE_LABEL[p.stage] ?? p.stage}</td>
               <td className="right num">{p.budgetCents ? money(p.budgetCents) : "—"}</td>
               <td>{p.handoffReason ? <span className="badge badge--reserved">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span> : ""}</td>
+              <td>{p.assignedName ?? <span className="muted">Sin asignar</span>}</td>
               <td className="right num">{num(p.messageCount)}</td>
               <td className="num muted">{p.lastInboundAt ? dateTime(p.lastInboundAt) : "—"}</td>
             </tr>
