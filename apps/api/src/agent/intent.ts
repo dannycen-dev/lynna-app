@@ -16,6 +16,9 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
       /\bquiero (lo )?comprar(lo)?\b/,
       /\bcomo (lo |la )?(puedo |podria )?apart(o|ar|arlo|arla)\b/,
       /\bquiero apartar/,
+      // "¿me lo apartas?", "apártamelo", "apártenlo", "lo aparto ya"
+      /\b(me |lo |la )?aparta(s|n|me|melo|mela|nlo|nla|rlo|rla)?\b/,
+      /\baparto\b/,
       /\bme (lo|la) quedo\b/,
       /\bver (el )?contrato\b/,
       /\b(puedo|podria) pagar (hoy|ya|ahorita)\b/,
@@ -29,7 +32,17 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
     reason: "descuento",
     patterns: [/\bdescuento\b/, /\bprecio especial\b/, /\b(rebaja|rebajar)\b/, /\bnegociar\b/, /\bme lo (deja|dejas|dejan) en\b/],
   },
-  { reason: "pago", patterns: [/\bya (pague|deposite|transferi)\b/, /\bcomprobante\b/, /\b(mi|el) pago\b/, /\bfactura\b/] },
+  {
+    reason: "pago",
+    patterns: [
+      /\bya (pague|deposite|transferi)\b/,
+      /\b(te|les|le) (transfiero|deposito|pago|mando el dinero)\b/,
+      /\b(hago|hacer|mandar) (la |una )?(transferencia|deposito)\b/,
+      /\bcomprobante\b/,
+      /\b(mi|el) pago\b/,
+      /\bfactura\b/,
+    ],
+  },
   { reason: "legal", patterns: [/\babogado\b/, /\blegal(es|mente)?\b/, /\bdemanda\b/, /\bejido\b/, /\bregimen de propiedad\b/] },
   { reason: "queja", patterns: [/\bqueja\b/, /\b(fraude|estafa)\b/, /\bpesimo\b/, /\bmolest[oa]\b/, /\bprofeco\b/] },
 ];

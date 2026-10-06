@@ -65,7 +65,8 @@ export class ConversationDO extends DurableObject<Env> {
     }
 
     if (this.env.AUTO_REPLY_MODE === "ai") {
-      await respondToConversation(this.env, conversationId, messageIds);
+      // La extracción de datos corre después de enviar la respuesta (no retrasa al prospecto).
+      await respondToConversation(this.env, conversationId, messageIds, { defer: (work) => this.ctx.waitUntil(work) });
       return;
     }
     if (this.env.AUTO_REPLY_MODE !== "ack") {

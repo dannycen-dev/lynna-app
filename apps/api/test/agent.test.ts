@@ -193,6 +193,20 @@ describe("simulador (HTTP, modelo falso)", () => {
     expect(empty.messages).toEqual([]);
   });
 
+  it("si el modelo no guardó datos que el prospecto dio, la extracción automática los guarda", async () => {
+    const res = (await (await send("Hola, me llamo Ana Torres y quiero invertir")).json()) as {
+      tools: { name: string }[];
+      prospect: { name: string; purpose: string; score: number };
+    };
+    // El modelo (falso) solo saludó, sin herramientas…
+    expect(res.tools).toEqual([]);
+    // …pero el CRM quedó con los datos.
+    expect(res.prospect).toMatchObject({ name: "Ana Torres", purpose: "inversion" });
+    expect(res.prospect.score).toBeGreaterThan(0);
+    const history = (await (await exports.default.fetch(BASE, { headers: auth })).json()) as { audit: { toolCalls: { name: string }[] }[] };
+    expect(history.audit[0]!.toolCalls.map((t) => t.name)).toContain("extraccion_automatica");
+  });
+
   it("el formato se adapta a WhatsApp y valida el cuerpo", async () => {
     expect((await send("")).status).toBe(400);
   });

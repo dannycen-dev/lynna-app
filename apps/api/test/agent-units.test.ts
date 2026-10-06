@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractAmounts, extractLots, validateReply } from "../src/agent/guard";
+import { extractProspectData, looksLikeProspectData } from "../src/agent/extract";
 import { detectEscalation, isOptOut } from "../src/agent/intent";
 import { normalizeCompletion, withFallback, type LlmClient } from "../src/agent/llm";
 import { computeScore, temperature } from "../src/agent/qualification";
@@ -69,6 +70,10 @@ describe("red de seguridad de intención (frases del cliente)", () => {
   );
   it.each(["¿Cuándo me entregan las escrituras?", "¿y la escritura cuándo?", "¿ya está escriturado?"])("'%s' → compra (escrituración)", (text) =>
     expect(detectEscalation(text)).toBe("compra"),
+  );
+  it.each(["¿Me lo apartas ya?", "apártamelo porfa", "¿lo aparto hoy?"])("'%s' → compra (apartado)", (text) => expect(detectEscalation(text)).toBe("compra"));
+  it.each(["te transfiero ahorita", "les deposito mañana", "hago la transferencia hoy"])("'%s' → pago", (text) =>
+    expect(detectEscalation(text)).toBe("pago"),
   );
   it("otras situaciones a turnar", () => {
     expect(detectEscalation("¿me haces un descuento?")).toBe("descuento");
@@ -158,5 +163,32 @@ describe("indicador de escritura en WhatsApp", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("extracción de datos del prospecto", () => {
+  it("solo se intenta si el mensaje parece traer datos", () => {
+    expect(looksLikeProspectData("Me llamo Juan y quiero invertir")).toBe(true);
+    expect(looksLikeProspectData("tengo 150 mil de enganche")).toBe(true);
+    expect(looksLikeProspectData("hola, gracias")).toBe(false);
+  });
+
+  it("toma solo campos válidos; uno inválido no tira los demás", async () => {
+    const llm: LlmClient = {
+      model: "x",
+      complete: async () => ({
+        content: 'Claro: {"nombre":"Juan Pérez","correo":"no-es-correo","presupuesto_mxn":700000,"uso":"inversion","plazo":"ayer","ciudad":null}',
+        toolCalls: [],
+        neurons: 2,
+      }),
+    };
+    expect(await extractProspectData(llm, "...")).toEqual({ data: { nombre: "Juan Pérez", presupuesto_mxn: 700000, uso: "inversion" }, neurons: 2 });
+  });
+
+  it("si el modelo falla o no devuelve JSON, no pasa nada", async () => {
+    const broken: LlmClient = { model: "x", complete: async () => Promise.reject(new Error("caído")) };
+    expect(await extractProspectData(broken, "...")).toEqual({ data: {}, neurons: 0 });
+    const noJson: LlmClient = { model: "x", complete: async () => ({ content: "no sé", toolCalls: [], neurons: 1 }) };
+    expect((await extractProspectData(noJson, "...")).data).toEqual({});
   });
 });

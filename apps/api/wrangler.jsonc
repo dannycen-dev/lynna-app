@@ -38,7 +38,8 @@
     // Respaldo si el principal falla (caída o límite). Gemma 4: 10/10 en eval; Mistral Small: 5/10 pero rápido y disponible.
     "AI_MODEL_FALLBACK": "@cf/mistralai/mistral-small-3.1-24b-instruct",
     // on | off | default — razonamiento del modelo (Gemma 4: chat_template_kwargs.enable_thinking).
-    "AI_THINKING": "default",
+    // "off": eval 10/10 en 2.8 s vs 13.3 s con razonamiento (la extracción y la red de seguridad cubren lo demás).
+    "AI_THINKING": "off",
     // Vacío = sin AI Gateway. Con id, las llamadas pasan por el gateway (logs, límites, caché).
     "AI_GATEWAY_ID": ""
   },
@@ -95,7 +96,7 @@
         "AUTO_REPLY_MODE": "ai",
         "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_FALLBACK": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "AI_THINKING": "default",
+        "AI_THINKING": "off",
         "AI_GATEWAY_ID": ""
       },
       "ai": { "binding": "AI" },
@@ -140,7 +141,7 @@
         "AUTO_REPLY_MODE": "ai",
         "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_FALLBACK": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "AI_THINKING": "default",
+        "AI_THINKING": "off",
         "AI_GATEWAY_ID": ""
       },
       "ai": { "binding": "AI" },
@@ -184,7 +185,7 @@
         "AUTO_REPLY_MODE": "off",
         "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
         "AI_MODEL_FALLBACK": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-        "AI_THINKING": "default",
+        "AI_THINKING": "off",
         "AI_GATEWAY_ID": ""
       },
       "ai": { "binding": "AI" },

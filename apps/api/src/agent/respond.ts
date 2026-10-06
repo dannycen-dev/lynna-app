@@ -5,8 +5,10 @@ import { log } from "../lib/log";
 import { isWithinServiceWindow, markReadWithTyping, sendText } from "../whatsapp/client";
 import { fakeLlm } from "./fake-llm";
 import { withFallback, workersAiClient, type LlmClient } from "./llm";
+import { extractProspectData, looksLikeProspectData } from "./extract";
 import { PROMPT_VERSION } from "./prompt";
 import { runAgent, type AgentResult } from "./runner";
+import { newFacts, runTool } from "./tools";
 
 /** ¿Hay credenciales reales de WhatsApp en este entorno? */
 export function canSendWhatsApp(env: Env): boolean {
@@ -47,7 +49,11 @@ export async function respondToConversation(
   env: Env,
   conversationId: string,
   pendingMessageIds: string[],
-  options: { llm?: LlmClient } = {},
+  options: {
+    llm?: LlmClient;
+    /** Para trabajo posterior a la respuesta (extracción de datos). Sin él, se espera en línea. */
+    defer?: (work: Promise<unknown>) => void;
+  } = {},
 ): Promise<RespondOutcome | null> {
   const db = getDb(env.DB);
   const row = await db
@@ -115,6 +121,7 @@ export async function respondToConversation(
   }
 
   const now = Date.now();
+  const auditId = crypto.randomUUID();
   await db.batch([
     db.insert(messages).values({
       tenantId: tenant.id,
@@ -131,6 +138,7 @@ export async function respondToConversation(
     }),
     db.update(conversations).set({ lastOutboundAt: now }).where(eq(conversations.id, conversationId)),
     db.insert(aiAuditLog).values({
+      id: auditId,
       tenantId: tenant.id,
       conversationId,
       model: result.deterministic ? "ninguno" : result.modelsUsed.join(" + ") || llm.model,
@@ -147,6 +155,27 @@ export async function respondToConversation(
       createdAt: now,
     }),
   ]);
+
+  // Extracción de datos separada de la conversación: si el modelo no guardó datos que el
+  // prospecto sí dio, una llamada corta y dedicada los extrae y actualiza la calificación.
+  const incomingText = incoming.map((m) => m.body ?? "").join("\n");
+  const savedByModel = result.toolTrace.some((t) => t.name === "actualizar_prospecto");
+  if (!result.deterministic && !savedByModel && looksLikeProspectData(incomingText)) {
+    const work = (async () => {
+      const { data, neurons } = await extractProspectData(llm, incomingText);
+      if (Object.keys(data).length === 0) return;
+      const ctx = { db, tenantId: tenant.id, prospectId: prospect.id, conversationId, facts: newFacts(), escalation: null };
+      const saved = await runTool(ctx, "actualizar_prospecto", data);
+      const trace = [...result.toolTrace, { name: "extraccion_automatica", args: data, result: saved }];
+      await db
+        .update(aiAuditLog)
+        .set({ toolCalls: trace, neurons: result.neurons + neurons })
+        .where(eq(aiAuditLog.id, auditId));
+      log("info", "agent.extracted", { conversationId, fields: Object.keys(data) });
+    })().catch((err) => log("warn", "agent.extract_failed", { conversationId, error: err instanceof Error ? err.message : String(err) }));
+    if (options.defer) options.defer(work);
+    else await work;
+  }
 
   log("info", "agent.replied", {
     conversationId,

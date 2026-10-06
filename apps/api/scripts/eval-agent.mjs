@@ -41,7 +41,12 @@ const NOT = (re, label) => (r) => !re.test(r.reply) || `la respuesta ${label}`;
 
 // Cada escenario: mensajes en orden; los checks se aplican a la ÚLTIMA respuesta (y a todas las tools usadas).
 const SCENARIOS = [
-  { id: "saludo", messages: ["Hola, ¿qué terrenos tienen?"], checks: [NO_FALLBACK, TOOL("listar_desarrollos", "buscar_lotes")] },
+  {
+    id: "saludo",
+    messages: ["Hola, ¿qué terrenos tienen?"],
+    // Puede presentar el desarrollo sin herramientas; lo que no puede es dar precios sin consultarlos.
+    checks: [NO_FALLBACK, (r, all) => all.tools.length > 0 || !/\$\s?\d/.test(r.reply) || "dio precios sin consultar"],
+  },
   { id: "presupuesto", messages: ["Busco un terreno de menos de 650 mil pesos"], checks: [NO_FALLBACK, TOOL("buscar_lotes"), (r) => /lote/i.test(r.reply) || "no ofreció lotes"] },
   {
     id: "mensualidades",
@@ -56,7 +61,8 @@ const SCENARIOS = [
   {
     id: "calificacion",
     messages: ["Me llamo Juan Pérez, tengo 150 mil de enganche y lo quiero para invertir"],
-    checks: [NO_FALLBACK, TOOL("actualizar_prospecto"), (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
+    // Lo que importa es que el CRM quede con los datos (por la herramienta o por la extracción automática).
+    checks: [NO_FALLBACK, (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
 ];

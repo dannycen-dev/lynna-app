@@ -19,7 +19,13 @@ const say = (content: string): Completion => ({ content, toolCalls: [], neurons:
 
 export const fakeLlm: LlmClient = {
   model: "fake",
-  async complete({ messages }) {
+  async complete({ messages, tools }) {
+    // Extractor de datos (sin herramientas, prompt de extracción): responde JSON determinista.
+    if (tools.length === 0 && messages[0]?.role === "system" && String(messages[0].content).startsWith("Extrae datos")) {
+      const t = strip(String(messages.at(-1)?.content ?? ""));
+      const nombre = /me llamo ([a-z]+(?: [a-z]+)?)/.exec(t)?.[1];
+      return say(JSON.stringify({ nombre: nombre ? nombre.replace(/\b\w/g, (c) => c.toUpperCase()) : null, uso: /invertir|inversion/.test(t) ? "inversion" : /vivir|casa/.test(t) ? "vivienda" : null }));
+    }
     let lastIdx = -1;
     messages.forEach((m, i) => {
       if (m.role === "user") lastIdx = i;
