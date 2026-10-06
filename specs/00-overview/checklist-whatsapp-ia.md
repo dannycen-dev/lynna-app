@@ -110,9 +110,9 @@
 - [ ] Reasignación automática si el vendedor no atiende en X minutos.
 
 ### 2.10 Notificaciones al vendedor cuando hay interés de compra
-- [ ] Disparadores de **intención de compra** (ver §3.2) → notificación inmediata.
-- [ ] Canales: plantilla WhatsApp al vendedor + notificación en el panel (WebSocket vía DO) + correo.
-- [ ] La notificación incluye resumen de la conversación, score y lote(s) de interés.
+- [x] Disparadores de **intención de compra** (ver §3.2) → notificación inmediata. — _cada escalamiento crea un aviso_
+- [ ] Canales: plantilla WhatsApp al vendedor + notificación en el panel (WebSocket vía DO) + correo. — _hoy: campana en el panel (consulta cada 10 s); WhatsApp al vendedor y correo pendientes_
+- [x] La notificación incluye resumen de la conversación, score y lote(s) de interés. — _título + detalle del escalamiento; enlace a la ficha_
 
 ### 2.11 Control de disponibilidad de terrenos
 - [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _hoy vía API de administración; panel en Fase 4_
@@ -122,9 +122,9 @@
 - **Acepta:** un lote marcado `vendido` desaparece de las respuestas de la IA al instante.
 
 ### 2.12 CRM para consultar y dar seguimiento
-- [ ] Pipeline kanban: Nuevo → Calificado → Cita agendada → Visitó → Negociación → Apartado → Vendido / Perdido.
-- [ ] Ficha del prospecto con conversación completa de WhatsApp, notas, actividades y citas.
-- [ ] **Bandeja de conversaciones**: el vendedor puede tomar el control (la IA se pausa en esa conversación) y devolverlo.
+- [x] Pipeline kanban: Nuevo → Calificado → Cita agendada → Visitó → Negociación → Apartado → Vendido / Perdido. — _tablero con arrastre; "perdido" exige motivo_
+- [x] Ficha del prospecto con conversación completa de WhatsApp, notas, actividades y citas. — _conversación, datos, notas e historial; citas en Fase 5_
+- [x] **Bandeja de conversaciones**: el vendedor puede tomar el control (la IA se pausa en esa conversación) y devolverlo. — _tomar/devolver desde la ficha; la IA se pausa_
 - [ ] Filtros por vendedor, desarrollo, score y etapa; exportación CSV.
 - [ ] Dashboard: prospectos por fuente, conversión por etapa, tiempo de primera respuesta, citas.
 - [ ] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo. — _login con usuarios y roles (admin/owner/manager/seller) ya en dev; falta filtrar prospectos por vendedor asignado_
@@ -220,7 +220,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 | **1. Inventario** ✅ | Desarrollos, lotes, media en R2, motor de planes de pago, importación CSV, E2E con Playwright | §2.2, §2.4, §2.11 |
 | **2. WhatsApp** | Webhook, cola, DO, envío de medios, túnel local | §2.1, §2.3, §2.13 |
 | **3. Agente IA** ✅ | Workers AI con tools, guardrails, validador, simulador en el panel, evaluación de modelos | §2.5, §2.6, §3 |
-| **4. CRM** 🟡 | Panel web ya en dev (inicio, cotizador, inventario, planes, prospectos). Login con usuarios y roles listo. Falta: pipeline, bandeja, toma de control, asignación, notificaciones | §2.9, §2.10, §2.12 |
+| **4. CRM** 🟡 | Panel, login y roles, tablero, ficha, toma de conversación, notas y avisos listos. Falta: asignación a vendedores, permisos por vendedor, filtros/CSV, métricas | §2.9, §2.10, §2.12 |
 | **5. Automatización** | Citas, recordatorios, seguimientos con Workflows | §2.7, §2.8 |
 | **6. Demo** | Datos de demo + número de pruebas + guion | §7 |
 | **7. Producción** | Deploy Cloudflare, dominio, onboarding del cliente | §8 |
