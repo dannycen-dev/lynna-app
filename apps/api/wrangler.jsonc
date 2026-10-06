@@ -1,5 +1,5 @@
 {
-  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "lynna-api",
   "main": "src/index.ts",
   // Debe ser <= a la fecha que soporta el workerd de wrangler Y el de vitest-pool-workers.
@@ -16,6 +16,11 @@
     "DEBOUNCE_MS": "3000",
     // off | ack — en la Fase 0 aún no hay IA; "ack" envía un acuse fijo para probar el circuito.
     "AUTO_REPLY_MODE": "off"
+  },
+
+  // Fuente de verdad de los secretos (tipos y aviso en local si falta alguno). Valores en .dev.vars / wrangler secret.
+  "secrets": {
+    "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN"]
   },
 
   "d1_databases": [
