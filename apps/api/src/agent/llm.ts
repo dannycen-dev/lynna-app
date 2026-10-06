@@ -26,6 +26,8 @@ export type Completion = {
   raw?: string;
   /** Modelo que respondió (difiere del principal si entró el de respaldo). */
   model?: string;
+  /** El modelo se quedó sin tokens (finish_reason "length"): el texto viene cortado. */
+  truncated?: boolean;
 };
 
 export interface LlmClient {
@@ -59,7 +61,8 @@ export function normalizeCompletion(result: unknown): Completion {
       args: parseArgs(tc.function?.arguments ?? tc.arguments),
     }));
     const content = typeof message.content === "string" ? message.content : null;
-    return { content, toolCalls, neurons, ...(content ? {} : { raw: JSON.stringify(r.choices?.[0]).slice(0, 800) }) };
+    const truncated = r.choices?.[0]?.finish_reason === "length";
+    return { content, toolCalls, neurons, ...(truncated ? { truncated } : {}), ...(content ? {} : { raw: JSON.stringify(r.choices?.[0]).slice(0, 800) }) };
   }
 
   const toolCalls: ToolCall[] = (r.tool_calls ?? []).map((tc: any, i: number) => ({
@@ -71,17 +74,21 @@ export function normalizeCompletion(result: unknown): Completion {
   return { content, toolCalls, neurons, ...(content ? {} : { raw: JSON.stringify(r).slice(0, 800) }) };
 }
 
-export function workersAiClient(ai: Ai, model: string, gatewayId?: string): LlmClient {
+/** thinking: undefined = lo que diga el modelo; false = sin razonamiento (más rápido, sin texto truncado). */
+export function workersAiClient(ai: Ai, model: string, gatewayId?: string, options: { thinking?: boolean } = {}): LlmClient {
   return {
-    model,
+    model: options.thinking === false ? `${model} (sin razonamiento)` : model,
     async complete({ messages, tools }) {
       const result = await ai.run(
         model as Parameters<Ai["run"]>[0],
         {
           messages,
           tools: tools.map((t) => ({ type: "function", function: t })),
-          max_tokens: 700,
+          // Holgado: modelos que razonan (Gemma 4) gastan tokens antes del texto visible.
+          max_tokens: 1500,
           temperature: 0.3,
+          // Solo se envía si se configuró: otros modelos podrían rechazar el parámetro.
+          ...(options.thinking !== undefined ? { chat_template_kwargs: { enable_thinking: options.thinking } } : {}),
         } as never,
         gatewayId ? { gateway: { id: gatewayId } } : undefined,
       );

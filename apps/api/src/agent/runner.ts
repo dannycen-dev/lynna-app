@@ -111,13 +111,17 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   const modelsUsed = new Set<string>();
   let neurons = 0;
 
+  let truncated = false;
+
   /** Corre el ciclo modelo ↔ herramientas hasta obtener texto final. */
   async function converse(): Promise<string | null> {
+    truncated = false;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const completion = await input.llm.complete({ messages, tools: round < MAX_TOOL_ROUNDS ? TOOL_SPECS : [] });
       neurons += completion.neurons;
       modelsUsed.add(completion.model ?? input.llm.model);
       if (completion.toolCalls.length === 0) {
+        truncated = Boolean(completion.truncated);
         const text = completion.content?.trim() || null;
         if (!text) log("warn", "agent.empty_completion", { conversationId: input.conversationId, model: input.llm.model, round, raw: completion.raw });
         return text;
@@ -144,9 +148,13 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   let fallback = false;
 
   try {
+    /** Un texto cortado por límite de tokens nunca se envía. */
+    const validate = (text: string | null) =>
+      !text ? ({ ok: false, reasons: ["respuesta vacía"] } as const) : truncated ? ({ ok: false, reasons: ["respuesta incompleta (límite de tokens)"] } as const) : validateReply(text, ctx.facts);
+
     draft = await converse();
     if (draft) drafts.push(draft);
-    let check = draft ? validateReply(draft, ctx.facts) : ({ ok: false, reasons: ["respuesta vacía"] } as const);
+    let check = validate(draft);
 
     if (draft && !check.ok) {
       // Un reintento: se le explica al modelo qué se bloqueó.
@@ -158,7 +166,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
       });
       draft = await converse();
       if (draft) drafts.push(draft);
-      check = draft ? validateReply(draft, ctx.facts) : ({ ok: false, reasons: ["respuesta vacía"] } as const);
+      check = validate(draft);
       if (!check.ok) blocked.push(...check.reasons);
     }
     if (draft && check.ok) reply = draft;

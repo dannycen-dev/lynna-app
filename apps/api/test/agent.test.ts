@@ -107,6 +107,13 @@ describe("runner del agente", () => {
     expect((await prospectRow())!.handoff_at).not.toBeNull();
   });
 
+  it("una respuesta cortada por límite de tokens no se envía", async () => {
+    const cut: Completion = { content: "Respecto a tu duda sobre las escrituras, ese es", toolCalls: [], neurons: 3, truncated: true };
+    const r = await runAgent(await input(scripted([cut, text("Un asesor te confirmará esos detalles en breve.")]), "hola"));
+    expect(r.blocked).toEqual(["respuesta incompleta (límite de tokens)"]);
+    expect(r.reply).toBe("Un asesor te confirmará esos detalles en breve.");
+  });
+
   it("bloquea promesas prohibidas aunque no tengan montos", async () => {
     const llm = scripted([text("¡Listo! Ya quedó apartado a tu nombre."), text("¡Listo! Ya quedó apartado.")]);
     const r = await runAgent(await input(llm, "hola"));

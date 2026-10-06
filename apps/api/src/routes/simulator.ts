@@ -16,6 +16,7 @@ const body = z.object({
   type: z.enum(["text", "image", "document"]).default("text"),
   // Solo automatización (token) o admin: para comparar modelos con `pnpm eval:agent`.
   model: z.string().regex(/^@(cf|hf)\//).optional(),
+  thinking: z.boolean().optional(),
 });
 
 function simIdentity(c: Ctx) {
@@ -52,7 +53,7 @@ export async function simulatorSend(c: Ctx) {
   const parsed = body.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
   const p = c.var.principal;
-  if (parsed.data.model && !(p.kind === "token" || p.user.role === "admin")) {
+  if ((parsed.data.model || parsed.data.thinking !== undefined) && !(p.kind === "token" || p.user.role === "admin")) {
     return c.json({ error: "forbidden", message: "Solo un admin puede cambiar el modelo." }, 403);
   }
 
@@ -90,7 +91,7 @@ export async function simulatorSend(c: Ctx) {
     .returning({ id: messages.id });
 
   const outcome = await respondToConversation(c.env, conversation!.id, [inbound!.id], {
-    ...(parsed.data.model ? { llm: defaultLlm(c.env, parsed.data.model) } : {}),
+    ...(parsed.data.model || parsed.data.thinking !== undefined ? { llm: defaultLlm(c.env, parsed.data.model, parsed.data.thinking) } : {}),
   });
   const after = await db.select().from(prospects).where(eq(prospects.id, prospect!.id)).get();
 

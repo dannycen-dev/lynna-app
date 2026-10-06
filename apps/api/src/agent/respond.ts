@@ -13,14 +13,15 @@ export function canSendWhatsApp(env: Env): boolean {
   return Boolean(env.WHATSAPP_ACCESS_TOKEN) && env.WHATSAPP_ACCESS_TOKEN !== "PENDIENTE";
 }
 
-export function defaultLlm(env: Env, model?: string): LlmClient {
+export function defaultLlm(env: Env, model?: string, thinkingOverride?: boolean): LlmClient {
   const chosen = model || env.AI_MODEL;
+  const thinking = thinkingOverride ?? (env.AI_THINKING === "off" ? false : env.AI_THINKING === "on" ? true : undefined);
   // El modelo falso solo existe en local (pruebas E2E sin red ni neuronas).
   if (chosen === "fake" && env.ENVIRONMENT === "local") return fakeLlm;
   const gateway = env.AI_GATEWAY_ID || undefined;
   // Con modelo explícito (evaluación) no hay respaldo: se mide ese modelo y nada más.
   const fallback = !model && env.AI_MODEL_FALLBACK ? workersAiClient(env.AI, env.AI_MODEL_FALLBACK, gateway) : null;
-  return withFallback(workersAiClient(env.AI, chosen, gateway), fallback, (err) =>
+  return withFallback(workersAiClient(env.AI, chosen, gateway, thinking === undefined ? {} : { thinking }), fallback, (err) =>
     log("warn", "agent.model_fallback", { primary: chosen, fallback: env.AI_MODEL_FALLBACK, error: err instanceof Error ? err.message : String(err) }),
   );
 }

@@ -96,6 +96,10 @@ describe("normalizeCompletion", () => {
     const c = normalizeCompletion({ response: "Hola", tool_calls: [{ name: "listar_desarrollos", arguments: {} }] });
     expect(c).toMatchObject({ content: "Hola", toolCalls: [{ name: "listar_desarrollos", args: {} }] });
   });
+  it("detecta respuestas truncadas (finish_reason length)", () => {
+    expect(normalizeCompletion({ choices: [{ message: { content: "ese es" }, finish_reason: "length" }] }).truncated).toBe(true);
+    expect(normalizeCompletion({ choices: [{ message: { content: "Listo." }, finish_reason: "stop" }] }).truncated).toBeUndefined();
+  });
   it("argumentos JSON inválidos no rompen", () => {
     const c = normalizeCompletion({ choices: [{ message: { tool_calls: [{ function: { name: "x", arguments: "{no json" } }] } }] });
     expect(c.toolCalls[0]!.args).toEqual({});

@@ -17,6 +17,8 @@ const { values: a } = parseArgs({
     token: { type: "string" },
     tenant: { type: "string", default: "demo" },
     models: { type: "string" },
+    // Para cada modelo, también probarlo sin razonamiento (chat_template_kwargs.enable_thinking=false).
+    "thinking-off": { type: "boolean", default: false },
     only: { type: "string" },
   },
 });
@@ -71,13 +73,16 @@ async function call(method, session, body) {
   return json;
 }
 
-const models = (a.models ?? "").split(",").map((m) => m.trim()).filter(Boolean);
-if (models.length === 0) models.push(undefined); // AI_MODEL del entorno
+const base = (a.models ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+if (base.length === 0) base.push(undefined); // AI_MODEL del entorno
+// Cada variante: { model, thinking }
+const models = a["thinking-off"] ? base.flatMap((m) => [{ model: m }, { model: m, thinking: false }]) : base.map((m) => ({ model: m }));
 const scenarios = SCENARIOS.filter((s) => !a.only || a.only.split(",").includes(s.id));
 const summary = [];
 
-for (const model of models) {
-  console.log(`\n━━ ${model ?? "(AI_MODEL del entorno)"} ━━`);
+for (const { model, thinking } of models) {
+  const label = `${model ?? "(AI_MODEL del entorno)"}${thinking === false ? " · sin razonamiento" : ""}`;
+  console.log(`\n━━ ${label} ━━`);
   let passed = 0, neurons = 0, latency = 0, turns = 0, fallbacks = 0;
   for (const sc of scenarios) {
     const session = `eval-${sc.id}-${Date.now()}`;
@@ -85,7 +90,7 @@ for (const model of models) {
     let last, tools = [], error = null;
     try {
       for (const m of sc.messages) {
-        last = await call("POST", session, { message: m, ...(model ? { model } : {}) });
+        last = await call("POST", session, { message: m, ...(model ? { model } : {}), ...(thinking !== undefined ? { thinking } : {}) });
         tools.push(...last.tools.map((t) => t.name));
         neurons += last.neurons;
         latency += last.latencyMs;
@@ -102,7 +107,7 @@ for (const model of models) {
     if (failures.length && last?.reply) console.log(`   ↳ ${last.reply.replace(/\s+/g, " ").slice(0, 220)}`);
     await call("DELETE", session);
   }
-  const row = { modelo: model ?? "(entorno)", aprobados: `${passed}/${scenarios.length}`, respaldos: fallbacks, latencia_prom_s: turns ? +(latency / turns / 1000).toFixed(1) : 0, neuronas: Math.round(neurons) };
+  const row = { modelo: label, aprobados: `${passed}/${scenarios.length}`, respaldos: fallbacks, latencia_prom_s: turns ? +(latency / turns / 1000).toFixed(1) : 0, neuronas: Math.round(neurons) };
   summary.push(row);
 }
 console.log("\nResumen:");
