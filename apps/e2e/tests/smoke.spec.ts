@@ -2,10 +2,11 @@ import { expect, test } from "@playwright/test";
 
 // @smoke: solo lectura. Corre después de cada deploy contra la URL del entorno.
 test.describe("smoke @smoke", () => {
-  test("health responde con el entorno esperado", async ({ request }) => {
+  test("health responde con el entorno esperado y el esquema de la base al día", async ({ request }) => {
     const res = await request.get("/health");
-    expect(res.ok()).toBeTruthy();
     const body = await res.json();
+    expect(body.schema, "a la base le falta la última migración").toMatchObject({ ok: true });
+    expect(res.ok()).toBeTruthy();
     expect(body.ok).toBe(true);
     if (process.env.E2E_EXPECT_ENV) expect(body.env).toBe(process.env.E2E_EXPECT_ENV);
   });

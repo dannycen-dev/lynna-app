@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { releaseExpiredReservations } from "./catalog/service";
 import { getDb } from "./db/client";
+import { schemaStatus } from "./db/schema-version";
 import { log } from "./lib/log";
 import { purgeExpiredSessions } from "./auth/session";
 import { admin } from "./routes/admin";
@@ -14,7 +15,10 @@ export { ConversationDO } from "./conversation/conversation-do";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get("/health", (c) => c.json({ ok: true, env: c.env.ENVIRONMENT }));
+app.get("/health", async (c) => {
+  const schema = await schemaStatus(c.env.DB);
+  return c.json({ ok: schema.ok, env: c.env.ENVIRONMENT, schema }, schema.ok ? 200 : 503);
+});
 app.route("/whatsapp", whatsappWebhook);
 app.route("/media", publicMedia);
 app.route("/api/auth", auth);
