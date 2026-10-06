@@ -20,7 +20,8 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
       /\bver (el )?contrato\b/,
       /\b(puedo|podria) pagar (hoy|ya|ahorita)\b/,
       /\bque (necesito|se necesita|requisitos?) para escriturar\b/,
-      /\bescritur(ar|acion)\b/,
+      // escritura(s), escriturar, escrituración, escriturado…
+      /\bescritur\w*/,
       /\bcerrar (el )?trato\b/,
     ],
   },

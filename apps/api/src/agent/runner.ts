@@ -39,6 +39,8 @@ export type AgentResult = {
   fallback: boolean;
   /** Respuesta sin modelo (archivos, baja): no se consumieron neuronas. */
   deterministic: boolean;
+  /** Modelos que realmente respondieron en este turno (incluye el de respaldo si entró). */
+  modelsUsed: string[];
   neurons: number;
   latencyMs: number;
 };
@@ -59,7 +61,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     .join("\n");
   // Lo que el propio prospecto dijo (su presupuesto, su enganche) se puede repetir: cuenta como dato verificado.
   for (const amount of extractAmounts(incomingText.replace(/(\d[\d,.]*)\s*(pesos|mxn)\b/gi, "$$$1"))) ctx.facts.amounts.add(amount);
-  const base = { draft: null, toolTrace: [], blocked: [], neurons: 0 };
+  const base = { draft: null, toolTrace: [], blocked: [], neurons: 0, modelsUsed: [] };
   const done = (r: Omit<AgentResult, "latencyMs" | "escalation">): AgentResult => ({
     ...r,
     escalation: ctx.escalation?.reason ?? null,
@@ -106,6 +108,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   ];
 
   const toolTrace: ToolTrace[] = [];
+  const modelsUsed = new Set<string>();
   let neurons = 0;
 
   /** Corre el ciclo modelo ↔ herramientas hasta obtener texto final. */
@@ -113,6 +116,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const completion = await input.llm.complete({ messages, tools: round < MAX_TOOL_ROUNDS ? TOOL_SPECS : [] });
       neurons += completion.neurons;
+      modelsUsed.add(completion.model ?? input.llm.model);
       if (completion.toolCalls.length === 0) {
         const text = completion.content?.trim() || null;
         if (!text) log("warn", "agent.empty_completion", { conversationId: input.conversationId, model: input.llm.model, round, raw: completion.raw });
@@ -176,5 +180,5 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará en breve para ayudarte con eso.`;
   }
 
-  return done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons });
+  return done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });
 }

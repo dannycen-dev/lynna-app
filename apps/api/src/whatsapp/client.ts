@@ -42,3 +42,20 @@ export async function sendText(
   const parsed = sendResponse.parse(JSON.parse(text));
   return { wamid: parsed.messages[0]!.id };
 }
+
+/**
+ * Marca el mensaje como leído y muestra "escribiendo…" al prospecto (se quita al responder o a los ~25 s).
+ * Es cortesía: si falla no debe impedir la respuesta, por eso nunca lanza.
+ */
+export async function markReadWithTyping(cfg: ClientConfig, phoneNumberId: string, wamid: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://graph.facebook.com/${cfg.graphVersion}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: wamid, typing_indicator: { type: "text" } }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

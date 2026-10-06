@@ -2,9 +2,9 @@ import { asc, eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { aiAuditLog, conversations, MESSAGE_STATUS_RANK, messages, prospects, tenants, waAccounts } from "../db/schema";
 import { log } from "../lib/log";
-import { isWithinServiceWindow, sendText } from "../whatsapp/client";
+import { isWithinServiceWindow, markReadWithTyping, sendText } from "../whatsapp/client";
 import { fakeLlm } from "./fake-llm";
-import { workersAiClient, type LlmClient } from "./llm";
+import { withFallback, workersAiClient, type LlmClient } from "./llm";
 import { PROMPT_VERSION } from "./prompt";
 import { runAgent, type AgentResult } from "./runner";
 
@@ -17,7 +17,12 @@ export function defaultLlm(env: Env, model?: string): LlmClient {
   const chosen = model || env.AI_MODEL;
   // El modelo falso solo existe en local (pruebas E2E sin red ni neuronas).
   if (chosen === "fake" && env.ENVIRONMENT === "local") return fakeLlm;
-  return workersAiClient(env.AI, chosen, env.AI_GATEWAY_ID || undefined);
+  const gateway = env.AI_GATEWAY_ID || undefined;
+  // Con modelo explícito (evaluación) no hay respaldo: se mide ese modelo y nada más.
+  const fallback = !model && env.AI_MODEL_FALLBACK ? workersAiClient(env.AI, env.AI_MODEL_FALLBACK, gateway) : null;
+  return withFallback(workersAiClient(env.AI, chosen, gateway), fallback, (err) =>
+    log("warn", "agent.model_fallback", { primary: chosen, fallback: env.AI_MODEL_FALLBACK, error: err instanceof Error ? err.message : String(err) }),
+  );
 }
 
 /** WhatsApp usa *negritas* y _cursivas_ con un solo símbolo y no soporta encabezados Markdown. */
@@ -66,6 +71,14 @@ export async function respondToConversation(
   if (incoming.length === 0) return null;
   const history = all.filter((m) => !pending.has(m.id) && m.status !== "failed");
 
+  // Conversación real con credenciales: leído + "escribiendo…" mientras la IA trabaja (~10 s).
+  const realConversation = prospect.source === "whatsapp" && canSendWhatsApp(env);
+  const waConfig = { accessToken: env.WHATSAPP_ACCESS_TOKEN, graphVersion: env.WHATSAPP_GRAPH_VERSION };
+  const lastIncoming = incoming.at(-1)!;
+  if (realConversation && isWithinServiceWindow(conversation.lastInboundAt) && !lastIncoming.wamid.startsWith("sim.")) {
+    await markReadWithTyping(waConfig, account.phoneNumberId, lastIncoming.wamid);
+  }
+
   const llm = options.llm ?? defaultLlm(env);
   const agentResult = await runAgent({
     db,
@@ -81,12 +94,11 @@ export async function respondToConversation(
   // Envío: real solo con credenciales, dentro de la ventana de 24 h y si no es el simulador.
   let sent: RespondOutcome["sent"] = "simulated";
   let wamid = `sim.${crypto.randomUUID()}`;
-  const realConversation = prospect.source === "whatsapp" && canSendWhatsApp(env);
   if (realConversation) {
     if (isWithinServiceWindow(conversation.lastInboundAt)) {
       try {
         ({ wamid } = await sendText(
-          { accessToken: env.WHATSAPP_ACCESS_TOKEN, graphVersion: env.WHATSAPP_GRAPH_VERSION },
+          waConfig,
           account.phoneNumberId,
           prospect.phone,
           result.reply,
@@ -120,7 +132,7 @@ export async function respondToConversation(
     db.insert(aiAuditLog).values({
       tenantId: tenant.id,
       conversationId,
-      model: result.deterministic ? "ninguno" : llm.model,
+      model: result.deterministic ? "ninguno" : result.modelsUsed.join(" + ") || llm.model,
       promptVersion: PROMPT_VERSION,
       input: incoming.map((m) => m.body ?? `[${m.type}]`).join("\n"),
       toolCalls: result.toolTrace,

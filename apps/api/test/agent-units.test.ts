@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { extractAmounts, extractLots, validateReply } from "../src/agent/guard";
 import { detectEscalation, isOptOut } from "../src/agent/intent";
-import { normalizeCompletion } from "../src/agent/llm";
+import { normalizeCompletion, withFallback, type LlmClient } from "../src/agent/llm";
 import { computeScore, temperature } from "../src/agent/qualification";
 import { toWhatsAppFormat } from "../src/agent/respond";
+import { markReadWithTyping } from "../src/whatsapp/client";
 import { newFacts } from "../src/agent/tools";
 
 const facts = (amounts: number[], lots: string[] = []) => {
@@ -66,6 +67,9 @@ describe("red de seguridad de intención (frases del cliente)", () => {
     "'%s' → compra",
     (text) => expect(detectEscalation(text)).toBe("compra"),
   );
+  it.each(["¿Cuándo me entregan las escrituras?", "¿y la escritura cuándo?", "¿ya está escriturado?"])("'%s' → compra (escrituración)", (text) =>
+    expect(detectEscalation(text)).toBe("compra"),
+  );
   it("otras situaciones a turnar", () => {
     expect(detectEscalation("¿me haces un descuento?")).toBe("descuento");
     expect(detectEscalation("ya pagué, te mando el comprobante")).toBe("pago");
@@ -109,4 +113,46 @@ it("calificación por reglas y temperatura", () => {
 
 it("formato de WhatsApp", () => {
   expect(toWhatsAppFormat("## Opciones\n- **Enganche:** $112,000\n\n\n\nFin")).toBe("Opciones\n- *Enganche:* $112,000\n\nFin");
+});
+
+describe("modelo de respaldo", () => {
+  const ok = (model: string): LlmClient => ({ model, complete: async () => ({ content: `hola de ${model}`, toolCalls: [], neurons: 1 }) });
+  const down: LlmClient = { model: "caido", complete: async () => Promise.reject(new Error("4009 internal error")) };
+  const input = { messages: [], tools: [] };
+
+  it("usa el principal mientras funcione", async () => {
+    expect(await withFallback(ok("principal"), ok("respaldo")).complete(input)).toMatchObject({ content: "hola de principal", model: "principal" });
+  });
+  it("si el principal falla, responde el de respaldo y avisa", async () => {
+    const errors: unknown[] = [];
+    const llm = withFallback(down, ok("respaldo"), (e) => errors.push(e));
+    expect(llm.model).toBe("caido");
+    expect(await llm.complete(input)).toMatchObject({ content: "hola de respaldo", model: "respaldo" });
+    expect(errors).toHaveLength(1);
+  });
+  it("sin respaldo, el error se propaga (y el runner manda el mensaje seguro)", async () => {
+    await expect(withFallback(down, null).complete(input)).rejects.toThrow("4009");
+  });
+});
+
+describe("indicador de escritura en WhatsApp", () => {
+  it("marca leído con typing_indicator y nunca lanza", async () => {
+    const original = globalThis.fetch;
+    const calls: { url: string; body: unknown }[] = [];
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    try {
+      expect(await markReadWithTyping({ accessToken: "t", graphVersion: "v23.0" }, "123", "wamid.X")).toBe(true);
+      expect(calls[0]).toEqual({
+        url: "https://graph.facebook.com/v23.0/123/messages",
+        body: { messaging_product: "whatsapp", status: "read", message_id: "wamid.X", typing_indicator: { type: "text" } },
+      });
+      globalThis.fetch = (async () => Promise.reject(new Error("sin red"))) as typeof fetch;
+      expect(await markReadWithTyping({ accessToken: "t", graphVersion: "v23.0" }, "123", "wamid.X")).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });

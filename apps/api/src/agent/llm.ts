@@ -24,6 +24,8 @@ export type Completion = {
   neurons: number;
   /** Fragmento de la respuesta cruda, solo para diagnosticar respuestas vacías. */
   raw?: string;
+  /** Modelo que respondió (difiere del principal si entró el de respaldo). */
+  model?: string;
 };
 
 export interface LlmClient {
@@ -84,6 +86,25 @@ export function workersAiClient(ai: Ai, model: string, gatewayId?: string): LlmC
         gatewayId ? { gateway: { id: gatewayId } } : undefined,
       );
       return normalizeCompletion(result);
+    },
+  };
+}
+
+/**
+ * Si el modelo principal falla (caída, límite de neuronas), se usa el de respaldo en esa llamada.
+ * El validador de salida aplica igual a ambos.
+ */
+export function withFallback(primary: LlmClient, fallback: LlmClient | null, onFallback?: (err: unknown) => void): LlmClient {
+  if (!fallback || fallback.model === primary.model) return primary;
+  return {
+    model: primary.model,
+    async complete(input) {
+      try {
+        return { ...(await primary.complete(input)), model: primary.model };
+      } catch (err) {
+        onFallback?.(err);
+        return { ...(await fallback.complete(input)), model: fallback.model };
+      }
     },
   };
 }
