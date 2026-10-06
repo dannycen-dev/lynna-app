@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { conversations, MESSAGE_STATUS_RANK, messages, prospects, waAccounts } from "../db/schema";
 import { log } from "../lib/log";
+import { respondToConversation } from "../agent/respond";
 import { isWithinServiceWindow, sendText } from "../whatsapp/client";
 
 // Tope para que una ráfaga larga no retrase la respuesta indefinidamente.
@@ -63,8 +64,12 @@ export class ConversationDO extends DurableObject<Env> {
       return;
     }
 
+    if (this.env.AUTO_REPLY_MODE === "ai") {
+      await respondToConversation(this.env, conversationId, messageIds);
+      return;
+    }
     if (this.env.AUTO_REPLY_MODE !== "ack") {
-      log("info", "conversation.pending_ai", { conversationId, messages: messageIds.length });
+      log("info", "conversation.auto_reply_off", { conversationId, messages: messageIds.length });
       return;
     }
     if (!isWithinServiceWindow(conversation.lastInboundAt)) return;

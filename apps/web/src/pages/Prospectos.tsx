@@ -2,7 +2,7 @@ import { ArrowLeft, MessageCircle, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import { useMessages, useProspects } from "../lib/api";
-import { dateTime, num, STAGE_LABEL } from "../lib/format";
+import { dateTime, HANDOFF_LABEL, money, num, STAGE_LABEL, temperature } from "../lib/format";
 
 function formatPhone(wa: string): string {
   // 5219991234567 → +52 1 999 123 4567 (formato legible MX)
@@ -16,7 +16,7 @@ export function Prospectos() {
 
   return (
     <div className="page">
-      <PageHeader title="Prospectos" subtitle="Contactos que llegaron por WhatsApp. El pipeline con etapas, asignación a vendedores y citas llega en la siguiente fase." />
+      <PageHeader title="Prospectos" subtitle="Contactos que llegaron por WhatsApp (o del simulador del agente). La calificación la calcula el sistema con lo que el prospecto le contó a la IA." />
       {prospects.isPending && <Spinner />}
       <ErrorAlert error={prospects.error} />
       {prospects.data?.length === 0 && (
@@ -31,7 +31,10 @@ export function Prospectos() {
               <tr>
                 <th>Contacto</th>
                 <th>Teléfono</th>
+                <th>Calificación</th>
                 <th>Etapa</th>
+                <th className="right">Presupuesto</th>
+                <th>Asesor</th>
                 <th className="right">Mensajes</th>
                 <th>Último mensaje</th>
               </tr>
@@ -41,11 +44,16 @@ export function Prospectos() {
                 <tr key={p.id} onClick={() => p.conversationId && navigate(`/prospectos/${p.conversationId}`)}>
                   <td>
                     <strong>{p.name ?? p.profileName ?? "Sin nombre"}</strong>
+                    {p.source === "simulator" && <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>Simulador</span>}
+                    {p.optedOutAt && <span className="badge badge--sold badge--plain" style={{ marginLeft: 6 }}>Baja</span>}
                   </td>
-                  <td className="num">{formatPhone(p.phone)}</td>
+                  <td className="num">{p.source === "simulator" ? "—" : formatPhone(p.phone)}</td>
                   <td>
-                    <span className="badge badge--info">{STAGE_LABEL[p.stage] ?? p.stage}</span>
+                    <span className={`badge badge--${temperature(p.score).tone}`}>{temperature(p.score).label}</span>
                   </td>
+                  <td>{STAGE_LABEL[p.stage] ?? p.stage}</td>
+                  <td className="right num">{p.budgetCents ? money(p.budgetCents) : "—"}</td>
+                  <td>{p.handoffReason ? <span className="badge badge--reserved">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span> : ""}</td>
                   <td className="right num">{num(p.messageCount)}</td>
                   <td className="num muted">{p.lastInboundAt ? dateTime(p.lastInboundAt) : "—"}</td>
                 </tr>

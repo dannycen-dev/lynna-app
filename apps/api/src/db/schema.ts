@@ -175,6 +175,16 @@ export const prospects = sqliteTable(
     score: integer("score").notNull().default(0),
     budgetCents: integer("budget_cents"),
     assignedUserId: text("assigned_user_id"),
+    // Calificación (la IA extrae los datos con la tool actualizar_prospecto; el score lo calcula el código).
+    city: text("city"),
+    purpose: text("purpose", { enum: ["vivienda", "inversion", "otro"] }),
+    downPaymentCents: integer("down_payment_cents"),
+    timeframe: text("timeframe", { enum: ["inmediato", "1-3_meses", "3-6_meses", "mas_6_meses", "explorando"] }),
+    interestDevelopmentId: text("interest_development_id").references(() => developments.id),
+    // Traspaso a un asesor humano (intención de compra, descuentos, temas legales, pagos, quejas, documentos).
+    handoffAt: integer("handoff_at"),
+    handoffReason: text("handoff_reason"),
+    source: text("source", { enum: ["whatsapp", "simulator"] }).notNull().default("whatsapp"),
     consentAt: integer("consent_at"),
     optedOutAt: integer("opted_out_at"),
     createdAt: createdAt(),
@@ -206,6 +216,7 @@ export const conversations = sqliteTable(
 // Los acuses de Meta pueden llegar desordenados; status_rank impide retroceder (read no lo pisa sent).
 export const MESSAGE_STATUS_RANK = {
   received: 0,
+  simulated: 0, // respuesta del simulador o de un entorno sin credenciales de Meta
   accepted: 0,
   sent: 1,
   delivered: 2,
@@ -303,4 +314,29 @@ export const loginAttempts = sqliteTable(
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("login_attempts_email_idx").on(t.email, t.createdAt)],
+);
+
+// Bitácora de cada respuesta del agente: qué entró, qué herramientas usó, qué bloqueó el validador y qué salió.
+export const aiAuditLog = sqliteTable(
+  "ai_audit_log",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    input: text("input").notNull(), // mensajes del prospecto que dispararon la respuesta
+    toolCalls: text("tool_calls", { mode: "json" }).$type<unknown[]>().notNull(),
+    draft: text("draft"), // última respuesta del modelo antes de validar
+    reply: text("reply").notNull(), // lo que se envió
+    blocked: text("blocked", { mode: "json" }).$type<string[]>().notNull(),
+    escalation: text("escalation"),
+    fallback: integer("fallback", { mode: "boolean" }).notNull().default(false),
+    neurons: real("neurons").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_audit_conversation_idx").on(t.conversationId, t.createdAt)],
 );

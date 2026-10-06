@@ -11,6 +11,12 @@ async function postSigned(request: APIRequestContext, body: string) {
   });
 }
 
+type Msg = { wamid: string; direction: "in" | "out"; author: string; status: string; body: string | null };
+
+async function messagesOf(request: APIRequestContext, conversationId: string): Promise<Msg[]> {
+  return (await (await request.get(`${TENANT}/conversations/${conversationId}/messages`, { headers: adminHeaders })).json()) as Msg[];
+}
+
 async function prospectByPhone(request: APIRequestContext, phone: string) {
   const rows = (await (await request.get(`${TENANT}/prospects`, { headers: adminHeaders })).json()) as {
     phone: string;
@@ -30,32 +36,36 @@ test("verificación del webhook con el verify token correcto", async ({ request 
   expect(await res.text()).toBe("reto-123");
 });
 
-test("un mensaje entrante crea el prospecto y su conversación (vía cola + Durable Object)", async ({ request }) => {
+test("un mensaje entrante crea el prospecto y el agente responde (cola + Durable Object + IA)", async ({ request }) => {
   const phone = randomMxPhone();
   const first = inboundText(phone, "Hola, ¿qué lotes tienen disponibles?");
   expect((await postSigned(request, first.body)).status()).toBe(200);
 
-  await expect.poll(async () => (await prospectByPhone(request, phone))?.messageCount, { timeout: 15_000 }).toBe(1);
+  await expect.poll(async () => (await prospectByPhone(request, phone))?.conversationId, { timeout: 15_000 }).toBeTruthy();
   const prospect = (await prospectByPhone(request, phone))!;
-  expect(prospect).toMatchObject({ profileName: "Prospecto E2E", stage: "new" });
+  expect(prospect).toMatchObject({ profileName: "Prospecto E2E", source: "whatsapp" });
+
+  await test.step("el agente contesta con un lote disponible real (sin credenciales de Meta: queda como simulado)", async () => {
+    await expect
+      .poll(async () => (await messagesOf(request, prospect.conversationId)).find((m) => m.direction === "out"), { timeout: 15_000 })
+      .toMatchObject({ author: "ai", status: "simulated", body: expect.stringContaining("Manzana C, lote 2") });
+  });
 
   await test.step("un reintento de Meta (mismo wamid) no duplica", async () => {
     expect((await postSigned(request, first.body)).status()).toBe(200);
     const second = inboundText(phone, "Busco algo de 250 m²");
     expect((await postSigned(request, second.body)).status()).toBe(200);
     // Cuando llega el segundo mensaje, el reintento ya se procesó (la cola es FIFO por lote).
-    await expect.poll(async () => (await prospectByPhone(request, phone))?.messageCount, { timeout: 15_000 }).toBe(2);
+    await expect
+      .poll(async () => (await messagesOf(request, prospect.conversationId)).filter((m) => m.direction === "in").length, { timeout: 15_000 })
+      .toBe(2);
   });
 
   await test.step("los acuses de entrega no retroceden", async () => {
     await postSigned(request, statusUpdate(first.wamid, phone, "read"));
     await postSigned(request, statusUpdate(first.wamid, phone, "sent"));
-    const messagesUrl = `${TENANT}/conversations/${prospect.conversationId}/messages`;
     await expect
-      .poll(async () => {
-        const msgs = (await (await request.get(messagesUrl, { headers: adminHeaders })).json()) as { wamid: string; status: string }[];
-        return msgs.find((m) => m.wamid === first.wamid)?.status;
-      }, { timeout: 15_000 })
+      .poll(async () => (await messagesOf(request, prospect.conversationId)).find((m) => m.wamid === first.wamid)?.status, { timeout: 15_000 })
       .toBe("read");
   });
 });

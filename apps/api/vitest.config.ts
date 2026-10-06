@@ -9,6 +9,8 @@ export default defineConfig(async () => {
     plugins: [
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
+        // Sin red ni neuronas en pruebas: el agente se prueba con un LLM falso (test/agent.test.ts).
+        remoteBindings: false,
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
@@ -17,6 +19,9 @@ export default defineConfig(async () => {
             WHATSAPP_VERIFY_TOKEN: "test-verify-token",
             WHATSAPP_ACCESS_TOKEN: "test-access-token",
             ADMIN_API_TOKEN: "test-admin-token-0123456789abcdef0123456789",
+            // El agente se prueba directo con un LLM falso; el DO no debe llamar a la IA en las pruebas.
+            AUTO_REPLY_MODE: "off",
+            AI_MODEL: "fake",
           },
         },
       }),

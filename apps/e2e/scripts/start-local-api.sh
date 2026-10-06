@@ -21,12 +21,17 @@ user --email gerente@demo.lynna.mx --name "Gerente E2E" --role manager --tenant 
 user --email vendedor@demo.lynna.mx --name "Vendedor E2E" --role seller --tenant demo --password "Vendedor-E2E-2026"
 user --email ops@igniastudio.mx --name "Ops Ignia" --role admin --password "Admin-E2E-2026!"
 
+# --local: sin bindings remotos (CI no tiene credenciales de Cloudflare). El agente usa el modelo
+# falso determinista (AI_MODEL=fake), que solo existe con ENVIRONMENT=local.
 exec pnpm exec wrangler dev \
+  --local \
   --port "${E2E_PORT:-8788}" \
   --inspector-port 0 \
   --persist-to "$STATE" \
   --var "WHATSAPP_APP_SECRET:e2e-app-secret" \
   --var "WHATSAPP_VERIFY_TOKEN:e2e-verify-token" \
-  --var "WHATSAPP_ACCESS_TOKEN:e2e-access-token" \
+  --var "WHATSAPP_ACCESS_TOKEN:PENDIENTE" \
   --var "ADMIN_API_TOKEN:e2e-admin-token-0123456789abcdef0123456789" \
-  --var "DEBOUNCE_MS:500"
+  --var "DEBOUNCE_MS:500" \
+  --var "AI_MODEL:fake" \
+  --var "AUTO_REPLY_MODE:ai"

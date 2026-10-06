@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from "react-router";
 import { Layout } from "./components/Layout";
 import { Empty, Spinner } from "./components/ui";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
@@ -10,6 +10,7 @@ import { InventarioDevelopment, InventarioList } from "./pages/Inventario";
 import { Login } from "./pages/Login";
 import { Planes } from "./pages/Planes";
 import { Conversacion, Prospectos } from "./pages/Prospectos";
+import { Simulador } from "./pages/Simulador";
 import { SessionProvider, useSession } from "./lib/session";
 import "./styles/app.css";
 
@@ -32,10 +33,27 @@ function LoginRoute() {
   return status === "signed-in" ? <Navigate to="/" replace /> : <Login />;
 }
 
+/** Error inesperado en una pantalla: mensaje claro en lugar del volcado técnico. */
+function RouteError() {
+  const error = useRouteError();
+  console.error(error);
+  return (
+    <div className="page">
+      <Empty title="Algo salió mal en esta pantalla">
+        <p>Recarga la página. Si vuelve a pasar, avísanos qué estabas haciendo.</p>
+        <button className="btn btn--primary" onClick={() => window.location.reload()}>
+          Recargar
+        </button>
+      </Empty>
+    </div>
+  );
+}
+
 const router = createBrowserRouter([
-  { path: "/login", element: <LoginRoute /> },
+  { path: "/login", element: <LoginRoute />, errorElement: <RouteError /> },
   {
     element: <Protected />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
       { path: "cotizador", element: <CotizadorDevelopments /> },
@@ -46,6 +64,7 @@ const router = createBrowserRouter([
       { path: "planes", element: <Planes /> },
       { path: "prospectos", element: <Prospectos /> },
       { path: "prospectos/:conversationId", element: <Conversacion /> },
+      { path: "agente", element: <Simulador /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],
   },

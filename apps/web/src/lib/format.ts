@@ -57,8 +57,43 @@ export function compareLots(a: { block: string; number: string }, b: { block: st
 export function slugify(text: string): string {
   return text
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+export const PURPOSE_LABEL: Record<string, string> = { vivienda: "Para vivir", inversion: "Inversión", otro: "Otro" };
+export const TIMEFRAME_LABEL: Record<string, string> = {
+  inmediato: "Inmediato",
+  "1-3_meses": "1 a 3 meses",
+  "3-6_meses": "3 a 6 meses",
+  mas_6_meses: "Más de 6 meses",
+  explorando: "Solo explorando",
+};
+export const HANDOFF_LABEL: Record<string, string> = {
+  compra: "Quiere comprar",
+  descuento: "Pide descuento",
+  legal: "Tema legal",
+  pago: "Tema de pagos",
+  queja: "Queja",
+  documentos: "Envió documentos",
+  otro: "Requiere asesor",
+};
+export const TOOL_LABEL: Record<string, string> = {
+  listar_desarrollos: "Consultó desarrollos",
+  buscar_lotes: "Buscó lotes disponibles",
+  detalle_lote: "Consultó un lote",
+  planes_de_pago: "Consultó planes de pago",
+  simular_plan: "Simuló un plan",
+  actualizar_prospecto: "Guardó datos del prospecto",
+  escalar_a_asesor: "Turnó a un asesor",
+};
+
+/** Calificación por puntaje (misma regla que la API: agent/qualification.ts). */
+export function temperature(score: number): { label: string; tone: "sold" | "info" | "reserved" | "available" } {
+  if (score >= 100) return { label: "Listo para comprar", tone: "available" };
+  if (score >= 60) return { label: "Caliente", tone: "reserved" };
+  if (score >= 30) return { label: "Tibio", tone: "info" };
+  return { label: "Frío", tone: "sold" };
 }

@@ -1,0 +1,112 @@
+import { describe, expect, it } from "vitest";
+import { extractAmounts, extractLots, validateReply } from "../src/agent/guard";
+import { detectEscalation, isOptOut } from "../src/agent/intent";
+import { normalizeCompletion } from "../src/agent/llm";
+import { computeScore, temperature } from "../src/agent/qualification";
+import { toWhatsAppFormat } from "../src/agent/respond";
+import { newFacts } from "../src/agent/tools";
+
+const facts = (amounts: number[], lots: string[] = []) => {
+  const f = newFacts();
+  amounts.forEach((a) => f.amounts.add(a));
+  lots.forEach((l) => f.lots.add(l));
+  return f;
+};
+
+describe("validador de salida", () => {
+  it("extrae montos en sus formatos comunes", () => {
+    expect(extractAmounts("Cuesta $768,000 MXN o $21,682.30 al mes; enganche de 112 mil y total 1.5 millones")).toEqual([768000, 21682, 112000, 1500000]);
+  });
+
+  it("acepta montos verificados (y sus redondeos) y rechaza inventados", () => {
+    const f = facts([768000, 21682, 112000]);
+    expect(validateReply("El lote cuesta $768,000 MXN y la mensualidad $21,682.30.", f)).toEqual({ ok: true });
+    expect(validateReply("Son unos 768 mil pesos.", f)).toEqual({ ok: true });
+    const bad = validateReply("Te quedaría en $650,000.", f);
+    expect(bad.ok).toBe(false);
+    expect(!bad.ok && bad.reasons[0]).toContain("$650,000");
+  });
+
+  it("ignora números pequeños (porcentajes, plazos, m²)", () => {
+    expect(validateReply("Enganche del 20 %, 12 meses, 250 m².", newFacts())).toEqual({ ok: true });
+  });
+
+  it("solo permite lotes devueltos por herramientas", () => {
+    expect(extractLots("Manzana A, lote 7 y el lote 3 de la manzana B")).toEqual([
+      { key: "A-7", number: "7" },
+      { key: "B-3", number: "3" },
+    ]);
+    const f = facts([], ["A-1"]);
+    expect(validateReply("Te recomiendo la Manzana A, lote 1.", f)).toEqual({ ok: true });
+    expect(validateReply("También está la manzana A, lote 7.", f).ok).toBe(false);
+    expect(validateReply("El lote 9 también te puede gustar.", f).ok).toBe(false);
+  });
+
+  it.each([
+    ["Te puedo hacer un descuento del 5 %.", "descuento"],
+    ["Podemos ofrecerte un descuento especial.", "descuento"],
+    ["Te lo dejo en menos si cierras hoy.", "precio especial"],
+    ["¡Listo! Ya quedó apartado a tu nombre.", "apartado"],
+    ["Recibimos tu pago, gracias.", "pago"],
+    ["La escrituración será en marzo.", "escrituración"],
+    ["Te garantizo que está disponible.", "disponibilidad"],
+  ])("bloquea: %s", (text, reasonPart) => {
+    const r = validateReply(text, newFacts());
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reasons.join(" ")).toContain(reasonPart);
+  });
+
+  it("permite hablar de descuentos sin ofrecerlos", () => {
+    expect(validateReply("Los descuentos los revisa directamente un asesor; te contactará en breve.", newFacts())).toEqual({ ok: true });
+  });
+});
+
+describe("red de seguridad de intención (frases del cliente)", () => {
+  it.each(["Quiero comprar.", "¿Cómo puedo apartarlo?", "Quiero ver el contrato.", "¿Puedo pagar hoy?", "¿Qué necesito para escriturar?"])(
+    "'%s' → compra",
+    (text) => expect(detectEscalation(text)).toBe("compra"),
+  );
+  it("otras situaciones a turnar", () => {
+    expect(detectEscalation("¿me haces un descuento?")).toBe("descuento");
+    expect(detectEscalation("ya pagué, te mando el comprobante")).toBe("pago");
+    expect(detectEscalation("esto es un fraude")).toBe("queja");
+    expect(detectEscalation("¿qué lotes tienen?")).toBeNull();
+    expect(detectEscalation("lo quiero pensar")).toBeNull();
+  });
+  it("baja", () => {
+    expect(isOptOut("BAJA")).toBe(true);
+    expect(isOptOut("ya no me escriban por favor")).toBe(true);
+    expect(isOptOut("¿dan de baja el apartado si no pago?")).toBe(false);
+  });
+});
+
+describe("normalizeCompletion", () => {
+  it("formato OpenAI (choices) con argumentos en string", () => {
+    const c = normalizeCompletion({
+      choices: [{ message: { content: null, tool_calls: [{ id: "c1", function: { name: "buscar_lotes", arguments: '{"presupuesto_max_mxn":700000}' } }] } }],
+      usage: { neurons: 4.2 },
+    });
+    expect(c).toMatchObject({ content: null, neurons: 4.2, toolCalls: [{ id: "c1", name: "buscar_lotes", args: { presupuesto_max_mxn: 700000 } }] });
+  });
+  it("formato clásico de Workers AI con argumentos en objeto", () => {
+    const c = normalizeCompletion({ response: "Hola", tool_calls: [{ name: "listar_desarrollos", arguments: {} }] });
+    expect(c).toMatchObject({ content: "Hola", toolCalls: [{ name: "listar_desarrollos", args: {} }] });
+  });
+  it("argumentos JSON inválidos no rompen", () => {
+    const c = normalizeCompletion({ choices: [{ message: { tool_calls: [{ function: { name: "x", arguments: "{no json" } }] } }] });
+    expect(c.toolCalls[0]!.args).toEqual({});
+  });
+});
+
+it("calificación por reglas y temperatura", () => {
+  const base = { name: null, budgetCents: null, downPaymentCents: null, timeframe: null, purpose: null, interestDevelopmentId: null, email: null, stage: "new" as const };
+  expect(computeScore(base)).toBe(0);
+  const warm = { ...base, budgetCents: 1, purpose: "vivienda" as const, name: "Ana" };
+  expect(temperature(computeScore(warm))).toBe("tibio");
+  expect(temperature(computeScore({ ...warm, downPaymentCents: 1, timeframe: "inmediato" as const }))).toBe("caliente");
+  expect(computeScore({ ...base, stage: "ready_to_buy" })).toBe(100);
+});
+
+it("formato de WhatsApp", () => {
+  expect(toWhatsAppFormat("## Opciones\n- **Enganche:** $112,000\n\n\n\nFin")).toBe("Opciones\n- *Enganche:* $112,000\n\nFin");
+});

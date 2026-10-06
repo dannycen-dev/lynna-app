@@ -151,6 +151,15 @@ export type Prospect = {
   profileName: string | null;
   stage: string;
   score: number;
+  city: string | null;
+  purpose: "vivienda" | "inversion" | "otro" | null;
+  budgetCents: number | null;
+  downPaymentCents: number | null;
+  timeframe: string | null;
+  handoffAt: number | null;
+  handoffReason: string | null;
+  optedOutAt: number | null;
+  source: "whatsapp" | "simulator";
   createdAt: number;
   conversationId: string | null;
   aiPaused: boolean | null;
@@ -177,4 +186,42 @@ export type ImportResult = {
   updated?: number;
   statusChanges?: number;
   errors?: { line: number; field?: string; message: string }[];
+};
+
+export type ToolTrace = { name: string; args: Record<string, unknown>; result: string };
+
+export type SimulatorTurn = {
+  conversationId: string;
+  reply: string | null;
+  skippedReason: string | null;
+  model: string | null;
+  tools: ToolTrace[];
+  blocked: string[];
+  escalation: string | null;
+  fallback: boolean;
+  neurons: number;
+  latencyMs: number;
+  prospect: Prospect & { email: string | null };
+};
+
+export type AiAudit = {
+  id: string;
+  model: string;
+  input: string;
+  toolCalls: ToolTrace[];
+  draft: string | null;
+  reply: string;
+  blocked: string[];
+  escalation: string | null;
+  fallback: boolean;
+  neurons: number;
+  latencyMs: number;
+  createdAt: number;
+};
+
+export type SimulatorHistory = {
+  conversationId: string | null;
+  messages: Message[];
+  audit: AiAudit[];
+  prospect: (Prospect & { email: string | null }) | null;
 };

@@ -1,4 +1,5 @@
 import {
+  Bot,
   Building2,
   CalendarCheck,
   Calculator,
@@ -25,6 +26,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { to: "/cotizador", label: "Cotizador", icon: <Calculator size={18} /> },
       { to: "/prospectos", label: "Prospectos", icon: <Users size={18} /> },
+      { to: "/agente", label: "Agente de IA", icon: <Bot size={18} /> },
       { to: "/conversaciones", label: "WhatsApp", icon: <MessageCircle size={18} />, soon: true },
       { to: "/citas", label: "Citas", icon: <CalendarCheck size={18} />, soon: true },
     ],
@@ -64,7 +66,9 @@ export function Layout() {
   const location = useLocation();
   const env = environmentLabel();
 
-  useEffect(() => setMenuOpen(false), [location.pathname]);
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className={`shell${menuOpen ? " shell--menu-open" : ""}`}>

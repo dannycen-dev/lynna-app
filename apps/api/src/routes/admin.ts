@@ -23,6 +23,7 @@ import { actorOf, authenticate, canAccessTenant, canWrite, type AuthVariables } 
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
+import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
 // API del panel. Personas con sesión (cookie) o automatización con ADMIN_API_TOKEN.
 
@@ -52,8 +53,9 @@ admin.use("/tenants/:tenant/*", async (c, next) => {
   if (!tenant || !canAccessTenant(c.var.principal, tenant.id)) {
     return c.json({ error: "not_found", message: "Desarrolladora no encontrada." }, 404);
   }
-  // Vendedores: solo lectura y simulación.
-  if (c.req.method !== "GET" && !c.req.path.endsWith("/simulate") && !canWrite(c.var.principal)) {
+  // Vendedores: solo lectura, simulación de planes y el simulador del agente (su propia conversación).
+  const sellerAllowed = c.req.path.endsWith("/simulate") || c.req.path.endsWith("/agent/simulator");
+  if (c.req.method !== "GET" && !sellerAllowed && !canWrite(c.var.principal)) {
     return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
   }
   c.set("tenant", tenant);
@@ -322,6 +324,15 @@ admin.get("/tenants/:tenant/prospects", async (c) => {
       profileName: prospects.profileName,
       stage: prospects.stage,
       score: prospects.score,
+      city: prospects.city,
+      purpose: prospects.purpose,
+      budgetCents: prospects.budgetCents,
+      downPaymentCents: prospects.downPaymentCents,
+      timeframe: prospects.timeframe,
+      handoffAt: prospects.handoffAt,
+      handoffReason: prospects.handoffReason,
+      optedOutAt: prospects.optedOutAt,
+      source: prospects.source,
       createdAt: prospects.createdAt,
       conversationId: conversations.id,
       aiPaused: conversations.aiPaused,
@@ -345,6 +356,12 @@ admin.get("/tenants/:tenant/conversations/:conversationId/messages", async (c) =
     .limit(500);
   return c.json(rows);
 });
+
+// ── Agente de IA: simulador de WhatsApp ──────────────────────────────────────────
+
+admin.get("/tenants/:tenant/agent/simulator", simulatorHistory);
+admin.post("/tenants/:tenant/agent/simulator", simulatorSend);
+admin.delete("/tenants/:tenant/agent/simulator", simulatorReset);
 
 // ── Fotos, planos y folletos (R2) ─────────────────────────────────────────────
 

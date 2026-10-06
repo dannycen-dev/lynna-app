@@ -13,6 +13,8 @@ import type {
   PaymentPlan,
   Prospect,
   Simulation,
+  SimulatorHistory,
+  SimulatorTurn,
   Summary,
 } from "./types";
 
@@ -158,5 +160,28 @@ export function useDeleteMedia() {
   return useMutation({
     mutationFn: (id: string) => call<void>(`/media/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => invalidate("media"),
+  });
+}
+
+// ── Agente de IA (simulador) ───────────────────────────────────────────────────
+
+export const useSimulatorHistory = () => useApiQuery<SimulatorHistory>(["simulator"], "/agent/simulator");
+
+export function useSimulatorSend() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: { message: string; type?: "text" | "image" | "document" }) =>
+      call<SimulatorTurn>("/agent/simulator", { method: "POST", body: JSON.stringify(data) }),
+    onSettled: () => invalidate("simulator", "prospects", "summary"),
+  });
+}
+
+export function useSimulatorReset() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: () => call<void>("/agent/simulator", { method: "DELETE" }),
+    onSuccess: () => invalidate("simulator", "prospects"),
   });
 }

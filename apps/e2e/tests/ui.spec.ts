@@ -164,6 +164,26 @@ test("planes: el formulario avisa si los porcentajes no suman 100 %", async ({ p
   await expect(page.getByText(/deben sumar 100 %/)).toBeVisible();
 });
 
+test("agente de IA: conversar en el simulador, ver herramientas y escalamiento", async ({ page }) => {
+  await login(page);
+  await sidebar(page).getByRole("link", { name: "Agente de IA" }).click();
+  await expect(page.getByRole("heading", { name: "Agente de IA" })).toBeVisible();
+
+  await page.getByLabel("Mensaje").fill("¿Qué lotes tienen?");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByText("Tengo disponible Manzana C, lote 2 por $560,000 MXN.", { exact: false })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Buscó lotes disponibles")).toBeVisible();
+  await expect(page.getByText("Validada")).toBeVisible();
+
+  await page.getByRole("button", { name: "Quiero comprar, ¿cómo lo aparto?" }).click();
+  await expect(page.getByText("Quiere comprar → asesor")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".badge", { hasText: "Listo para comprar" })).toBeVisible();
+  await shot(page, "15-agente-ia");
+
+  await page.getByRole("button", { name: "Nueva conversación" }).click();
+  await expect(page.getByText("Escribe como lo haría un prospecto")).toBeVisible();
+});
+
 test("móvil: el menú lateral se abre como cajón", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);

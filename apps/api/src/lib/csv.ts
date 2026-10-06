@@ -51,7 +51,7 @@ export function parseCsv(input: string): string[][] {
 export function normalizeHeader(header: string): string {
   return header
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/²/g, "2")
     .toLowerCase()
     .trim()

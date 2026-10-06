@@ -31,9 +31,15 @@
     "WHATSAPP_GRAPH_VERSION": "v23.0",
     // Ventana para agrupar ráfagas de mensajes del mismo prospecto antes de responder.
     "DEBOUNCE_MS": "3000",
-    // off | ack — en la Fase 0 aún no hay IA; "ack" envía un acuse fijo para probar el circuito.
-    "AUTO_REPLY_MODE": "off"
+    // off | ack | ai — "ai" responde con el agente (Workers AI); "ack" envía un acuse fijo.
+    "AUTO_REPLY_MODE": "ai",
+    // Modelo de Workers AI (con function calling). Se elige con `pnpm eval:agent`.
+    "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+    // Vacío = sin AI Gateway. Con id, las llamadas pasan por el gateway (logs, límites, caché).
+    "AI_GATEWAY_ID": ""
   },
+
+  "ai": { "binding": "AI" },
 
   // Fuente de verdad de los secretos (tipos y aviso en local si falta alguno). Valores en .dev.vars / wrangler secret.
   "secrets": {
@@ -82,8 +88,11 @@
         "ENVIRONMENT": "dev",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
-        "AUTO_REPLY_MODE": "off"
+        "AUTO_REPLY_MODE": "ai",
+        "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_GATEWAY_ID": ""
       },
+      "ai": { "binding": "AI" },
       "secrets": {
         "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
@@ -122,8 +131,11 @@
         "ENVIRONMENT": "stg",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
-        "AUTO_REPLY_MODE": "off"
+        "AUTO_REPLY_MODE": "ai",
+        "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_GATEWAY_ID": ""
       },
+      "ai": { "binding": "AI" },
       "secrets": {
         "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
@@ -161,8 +173,11 @@
         "ENVIRONMENT": "prod",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
-        "AUTO_REPLY_MODE": "off"
+        "AUTO_REPLY_MODE": "off",
+        "AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+        "AI_GATEWAY_ID": ""
       },
+      "ai": { "binding": "AI" },
       "secrets": {
         "required": ["WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_ACCESS_TOKEN", "ADMIN_API_TOKEN"]
       },
