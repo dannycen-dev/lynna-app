@@ -42,6 +42,11 @@ admin.onError((err, c) => {
   return c.json({ error: "internal_error" }, 500);
 });
 
+admin.get("/tenants", async (c) => {
+  const rows = await getDb(c.env.DB).select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).orderBy(asc(tenants.name));
+  return c.json(rows);
+});
+
 admin.use("/tenants/:tenant/*", async (c, next) => {
   const tenant = await getDb(c.env.DB).select().from(tenants).where(eq(tenants.slug, c.req.param("tenant"))).get();
   if (!tenant) return c.json({ error: "not_found", message: "Tenant no encontrado." }, 404);
@@ -63,6 +68,45 @@ async function readJson<T extends z.ZodType>(c: Context, schema: T): Promise<{ d
   }
   return { data: parsed.data };
 }
+
+// ── Resumen (KPIs del inicio) ───────────────────────────────────────────────────
+
+admin.get("/tenants/:tenant/summary", async (c) => {
+  const db = getDb(c.env.DB);
+  const tenantId = c.var.tenant.id;
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const [byDevelopment, prospectTotals] = await Promise.all([
+    db
+      .select({
+        developmentId: developments.id,
+        slug: developments.slug,
+        name: developments.name,
+        city: developments.city,
+        status: developments.status,
+        total: sql<number>`count(${lots.id})`,
+        available: sql<number>`coalesce(sum(${lots.status} = 'available'), 0)`,
+        reserved: sql<number>`coalesce(sum(${lots.status} = 'reserved'), 0)`,
+        sold: sql<number>`coalesce(sum(${lots.status} = 'sold'), 0)`,
+        blocked: sql<number>`coalesce(sum(${lots.status} = 'blocked'), 0)`,
+        availableValueCents: sql<number>`coalesce(sum(case when ${lots.status} = 'available' then ${lots.totalPriceCents} end), 0)`,
+        minAvailablePriceCents: sql<number | null>`min(case when ${lots.status} = 'available' then ${lots.totalPriceCents} end)`,
+      })
+      .from(developments)
+      .leftJoin(lots, eq(lots.developmentId, developments.id))
+      .where(eq(developments.tenantId, tenantId))
+      .groupBy(developments.id)
+      .orderBy(asc(developments.name)),
+    db
+      .select({
+        prospects: sql<number>`count(*)`,
+        newLast24h: sql<number>`coalesce(sum(${prospects.createdAt} >= ${since}), 0)`,
+      })
+      .from(prospects)
+      .where(eq(prospects.tenantId, tenantId))
+      .get(),
+  ]);
+  return c.json({ tenant: c.var.tenant, developments: byDevelopment, prospects: prospectTotals });
+});
 
 // ── Desarrollos ────────────────────────────────────────────────────────────────
 

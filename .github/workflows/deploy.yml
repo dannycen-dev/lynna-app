@@ -50,6 +50,8 @@ jobs:
           done
           echo "::error::El health check de ${{ inputs.environment }} no respondió como se esperaba."
           exit 1
+      - name: Navegador para Playwright
+        run: pnpm --filter @lynna/e2e exec playwright install --with-deps chromium
       - name: Smoke E2E (Playwright, solo lectura)
         env:
           E2E_BASE_URL: https://lynna-api-${{ inputs.environment }}.igniastudiomx.workers.dev

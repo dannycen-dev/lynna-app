@@ -20,7 +20,9 @@ apps/api/                  Worker (Hono) — webhook WhatsApp, cola, Durable Obj
   migrations/              Migraciones generadas por drizzle-kit (no editar a mano)
   seed/demo.sql            Desarrollo ficticio "Residencial Los Almendros" (40 lotes, 3 planes)
   scripts/                 Herramientas locales (simular mensajes entrantes)
-apps/e2e/                  Pruebas end-to-end con Playwright (API hoy; panel en Fase 4)
+apps/web/                  Panel (React 19 + Vite + React Router + TanStack Query) con el diseño de Lynna;
+                           el mismo Worker lo sirve como assets estáticos (mismo origen que la API)
+apps/e2e/                  Pruebas end-to-end con Playwright: API, navegador y smoke post-deploy
 specs/                     Specs del producto
 ```
 
@@ -33,8 +35,12 @@ pnpm install
 cp apps/api/.dev.vars.example apps/api/.dev.vars   # llenar valores
 pnpm db:migrate        # aplica migraciones a la D1 local
 pnpm db:seed           # carga el desarrollo de demo
-pnpm dev               # http://localhost:8787
+pnpm build            # compila la interfaz (apps/web/dist)
+pnpm dev               # http://localhost:8787 → API + interfaz compilada
+pnpm dev:web           # opcional: http://localhost:5173 con recarga en caliente (proxy a la API)
 ```
+
+Entra con la clave `ADMIN_API_TOKEN` de `apps/api/.dev.vars` (acceso provisional hasta el login con usuarios).
 
 Comprobar:
 
@@ -92,7 +98,8 @@ La URL del túnel rápido cambia en cada arranque; hay que actualizarla en Meta.
 |---|---|
 | `pnpm dev` | Worker local con D1, R2, Queues y DO simulados |
 | `pnpm test` | Vitest dentro del runtime de Workers (unitarias e integración) |
-| `pnpm e2e` | Playwright: levanta `wrangler dev` con estado limpio + seed y prueba los flujos por HTTP |
+| `pnpm e2e` | Playwright: levanta `wrangler dev` con estado limpio + seed y prueba API e interfaz (Chromium) |
+| `SCREENSHOT_DIR=/ruta pnpm e2e` | Además guarda capturas de cada pantalla |
 | `E2E_BASE_URL=https://… pnpm e2e:smoke` | Solo pruebas `@smoke` (lectura) contra un entorno desplegado |
 | `pnpm typecheck` | TypeScript estricto |
 | `pnpm db:generate` | Genera migración tras cambiar `schema.ts` |

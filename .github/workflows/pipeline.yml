@@ -23,6 +23,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Compilar interfaz (la API la sirve como assets)
+        run: pnpm build
       - name: Tipos de wrangler al día
         run: pnpm --filter @lynna/api exec wrangler types --strict-vars=false --check
       - run: pnpm typecheck
@@ -38,7 +40,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Playwright (API local con wrangler dev)
+      - name: Navegador para Playwright
+        run: pnpm --filter @lynna/e2e exec playwright install --with-deps chromium
+      - name: Playwright (API + interfaz con wrangler dev)
         run: pnpm e2e
       - uses: actions/upload-artifact@v4
         if: failure()

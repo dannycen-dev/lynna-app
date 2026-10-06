@@ -13,6 +13,8 @@
     "db:migrate": "pnpm --filter @lynna/api db:migrate:local",
     "db:seed": "pnpm --filter @lynna/api db:seed:local",
     "e2e": "pnpm --filter @lynna/e2e e2e",
-    "e2e:smoke": "pnpm --filter @lynna/e2e e2e:smoke"
+    "e2e:smoke": "pnpm --filter @lynna/e2e e2e:smoke",
+    "dev:web": "pnpm --filter @lynna/web dev",
+    "build": "pnpm --filter @lynna/web build"
   }
 }

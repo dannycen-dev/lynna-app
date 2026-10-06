@@ -16,6 +16,15 @@
   "workers_dev": false,
   "preview_urls": false,
 
+  // Interfaz (apps/web, compilada con Vite). El Worker atiende primero API, webhook y media;
+  // todo lo demás son archivos estáticos con fallback a index.html (SPA).
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/whatsapp/*", "/media/*", "/health"]
+  },
+
   "vars": {
     "ENVIRONMENT": "local",
     "WHATSAPP_GRAPH_VERSION": "v23.0",

@@ -6,6 +6,11 @@ API_DIR="$(cd "$(dirname "$0")/../../api" && pwd)"
 STATE="$API_DIR/.wrangler/e2e-state"
 cd "$API_DIR"
 
+# La interfaz se sirve desde apps/web/dist: se compila si no existe (CI) o si se pide.
+if [ ! -f "$API_DIR/../web/dist/index.html" ] || [ "${E2E_BUILD_WEB:-}" = "1" ]; then
+  pnpm --filter @lynna/web build >/dev/null
+fi
+
 rm -rf "$STATE"
 pnpm exec wrangler d1 migrations apply DB --local --persist-to "$STATE" >/dev/null
 pnpm exec wrangler d1 execute DB --local --persist-to "$STATE" --file=seed/demo.sql >/dev/null

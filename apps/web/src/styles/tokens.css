@@ -1,0 +1,67 @@
+/* Tokens del design system de Lynna (portados de lynna_theme/static/src/css/theme.css). */
+
+:root {
+  color-scheme: light;
+
+  /* Superficies */
+  --lynna-surface: #f9f9f9;
+  --lynna-surface-container-low: #f3f3f3;
+  --lynna-surface-container: #eeeeee;
+  --lynna-surface-container-high: #e8e8e8;
+  --lynna-surface-card: #ffffff;
+
+  /* Texto */
+  --lynna-on-surface: #1a1c1c;
+  --lynna-on-surface-variant: #3d4947;
+  --lynna-muted: #6d7a77;
+
+  /* Bordes */
+  --lynna-outline: #6d7a77;
+  --lynna-outline-variant: #bcc9c6;
+  --lynna-divider: #e3e8e7;
+
+  /* Primario */
+  --lynna-primary: #00685f;
+  --lynna-primary-container: #008378;
+  --lynna-on-primary: #ffffff;
+  --lynna-primary-tint: rgba(0, 104, 95, 0.08);
+  --lynna-primary-tint-strong: rgba(0, 104, 95, 0.14);
+  --lynna-primary-glow: rgba(0, 104, 95, 0.18);
+  --lynna-primary-dark: #004d46;
+
+  /* Estados */
+  --lynna-error: #ba1a1a;
+  --lynna-error-container: #ffdad6;
+  --lynna-on-error-container: #93000a;
+  --lynna-success-bg: #e6f4ef;
+  --lynna-success-text: #0d5c4a;
+  --lynna-warning-bg: #fff4e5;
+  --lynna-warning-text: #8a5a00;
+  --lynna-info-bg: #e8f4f8;
+  --lynna-info-text: #0d5c6a;
+  --lynna-neutral-bg: #eceeee;
+  --lynna-neutral-text: #4a5553;
+
+  /* Estado de lote (inventario y plano) */
+  --lot-available: #0d8a6f;
+  --lot-reserved: #d48806;
+  --lot-sold: #8c9694;
+  --lot-blocked: #5c7cfa;
+
+  /* Forma */
+  --lynna-radius-sm: 4px;
+  --lynna-radius: 8px;
+  --lynna-radius-lg: 12px;
+  --lynna-radius-full: 9999px;
+
+  /* Sombras */
+  --lynna-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --lynna-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --lynna-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+
+  /* Layout */
+  --lynna-navbar-height: 56px;
+  --lynna-sidebar-width: 240px;
+  --lynna-font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --lynna-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}

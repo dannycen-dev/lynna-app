@@ -16,6 +16,11 @@ export default defineConfig({
   use: {
     baseURL: REMOTE_BASE_URL ?? `http://127.0.0.1:${LOCAL_PORT}`,
     trace: "retain-on-failure",
+    browserName: "chromium",
+    viewport: { width: 1366, height: 900 },
+    locale: "es-MX",
+    timezoneId: "America/Mexico_City",
+    contextOptions: { reducedMotion: "reduce" },
   },
   ...(remote
     ? {}
