@@ -2,8 +2,10 @@ import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, sql } from
 import type { Db } from "../db/client";
 import { appointments, availabilityRules, notifications, prospects, tenants, users, type AppointmentStatus } from "../db/schema";
 import type { BatchItem } from "drizzle-orm/batch";
+import { z } from "zod";
 import { addDays, parseIsoDate, todayIn } from "../financing/dates";
 import { auditInsert } from "../lib/audit";
+import { isDayOff, timeOffBetween } from "./time-off";
 
 // Agenda de citas: horarios semanales por vendedor, horarios libres y reserva sin empalmes.
 // Las horas de los vendedores son hora local de la desarrolladora (tenants.timezone); en la base todo es epoch ms.
@@ -73,6 +75,24 @@ export const parseTime = (hhmm: string): number | null => {
   return h < 24 && min < 60 ? h * 60 + min : null;
 };
 
+/**
+ * Horario semanal: hasta 4 tramos por día (p. ej. 9–14 y 16–19), sin empalmes entre ellos. Lo usan el
+ * horario de citas de cada vendedor y el horario de atención de la oficina.
+ */
+export const weekRules = <T extends z.ZodType<{ weekday: number; startMinute: number; endMinute: number }>>(rule: T) =>
+  z
+    .array(rule)
+    .max(28)
+    .superRefine((rules, ctx) => {
+      const sorted = [...rules].sort((a, b) => a.weekday - b.weekday || a.startMinute - b.startMinute);
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i]!.weekday === sorted[i - 1]!.weekday && sorted[i]!.startMinute < sorted[i - 1]!.endMinute) {
+          ctx.addIssue({ code: "custom", message: "Hay horarios que se empalman en el mismo día." });
+          return;
+        }
+      }
+    });
+
 // ── Horarios libres ─────────────────────────────────────────────────────────────
 
 export type Slot = { userId: string; userName: string; startsAt: number; endsAt: number };
@@ -122,12 +142,15 @@ export async function freeSlots(
       ),
     );
 
+  // Vacaciones del vendedor y cierres de oficina.
+  const daysOff = await timeOffBetween(db, tenant.id, fromDate, addDays(fromDate, days - 1));
+
   const slots: Slot[] = [];
   for (let i = 0; i < days; i++) {
     const date = addDays(fromDate, i);
     const weekday = weekdayOf(date);
     for (const rule of rules) {
-      if (rule.weekday !== weekday) continue;
+      if (rule.weekday !== weekday || isDayOff(daysOff, rule.userId, date)) continue;
       for (let minute = rule.startMinute; minute + tenant.appointmentMinutes <= rule.endMinute; minute += tenant.appointmentMinutes) {
         const startsAt = localToEpoch(date, minute, tz);
         const endsAt = startsAt + duration;

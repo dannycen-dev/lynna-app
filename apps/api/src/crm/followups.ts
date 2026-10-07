@@ -4,6 +4,7 @@ import { appointments, conversations, developments, MESSAGE_STATUS_RANK, message
 import { auditInsert } from "../lib/audit";
 import { localParts } from "./agenda";
 import { isOpen } from "./business-hours";
+import { officeClosedDates } from "./time-off";
 
 // Seguimientos automáticos: si un prospecto deja de responder, se le escribe tras X horas de silencio
 // (pasos configurables por desarrolladora). La secuencia se detiene si responde (y vuelve a empezar desde
@@ -22,7 +23,8 @@ export const DEFAULT_FOLLOWUP_STEPS: FollowupStep[] = [
 ];
 
 /** Fuera de horario de oficina (o, si no hay horario, antes de las 9:00 o después de las 20:00) no se escribe. */
-function canWriteNow(tenant: { businessHours: typeof tenants.$inferSelect.businessHours; timezone: string }, now: number) {
+function canWriteNow(tenant: { businessHours: typeof tenants.$inferSelect.businessHours; timezone: string }, now: number, closed: Set<string>) {
+  if (closed.has(localParts(now, tenant.timezone).date)) return false; // día festivo / oficina cerrada
   if (tenant.businessHours?.length) return isOpen(tenant.businessHours, tenant.timezone, now);
   const [h] = localParts(now, tenant.timezone).time.split(":").map(Number);
   return h! >= 9 && h! < 20;
@@ -70,7 +72,7 @@ export async function processFollowups(db: Db, now = Date.now()) {
   const enabled = await db.select().from(tenants).where(eq(tenants.followupsEnabled, true));
   let sent = 0;
   for (const tenant of enabled) {
-    if (!canWriteNow(tenant, now)) continue;
+    if (!canWriteNow(tenant, now, await officeClosedDates(db, tenant.id, tenant.timezone, now, 0))) continue;
     const steps = tenant.followupSteps?.length ? tenant.followupSteps : DEFAULT_FOLLOWUP_STEPS;
     const minSilence = Math.min(...steps.map((s) => s.afterHours)) * H;
     const candidates = await db

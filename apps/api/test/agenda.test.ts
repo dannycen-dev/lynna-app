@@ -5,6 +5,7 @@ import { newFacts, rememberSlot, runTool } from "../src/agent/tools";
 import { hashPassword } from "../src/auth/password";
 import { bookAppointment, freeSlots, localToEpoch, remindSellers, slotLabel, weekdayOf } from "../src/crm/agenda";
 import { getDb } from "../src/db/client";
+import { advisorEta } from "../src/crm/business-hours";
 import { addDays, todayIn } from "../src/financing/dates";
 
 const ORIGIN = "https://lynna.test";
@@ -61,6 +62,7 @@ beforeEach(async () => {
     [
       "appointments",
       "availability_rules",
+      "time_off",
       "notification_reads",
       "notifications",
       "prospect_notes",
@@ -317,5 +319,80 @@ describe("agenda: API del panel", () => {
     const cancelled = await miguel.json("/agent/simulator", "POST", { message: "Mejor cancela mi cita" });
     expect(cancelled.tools.map((t: { name: string }) => t.name)).toContain("cancelar_cita");
     expect((await miguel.json(`/prospects/${done.prospect.id}`)).appointments[0].status).toBe("cancelled");
+  });
+});
+
+describe("agenda: varios horarios por día y días libres", () => {
+  const times = (slots: { time: string }[]) => slots.map((s) => s.time);
+
+  it("dos tramos el mismo día (hora de comida); los empalmes se rechazan", async () => {
+    const laura = await login("laura@demo.mx");
+    await createProspect("p-0001", "u-miguel");
+    const day = weekdayOf(tomorrow());
+    const split = [
+      { weekday: day, startMinute: 9 * 60, endMinute: 11 * 60 },
+      { weekday: day, startMinute: 16 * 60, endMinute: 18 * 60 },
+    ];
+    expect((await laura.call("/availability/u-miguel", "PUT", { rules: split })).status).toBe(200);
+    expect(times(await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0001`))).toEqual(["09:00", "10:00", "16:00", "17:00"]);
+    const overlap = await laura.call("/availability/u-miguel", "PUT", {
+      rules: [
+        { weekday: day, startMinute: 9 * 60, endMinute: 12 * 60 },
+        { weekday: day, startMinute: 11 * 60, endMinute: 13 * 60 },
+      ],
+    });
+    expect(overlap.status).toBe(400);
+    // El horario de atención de la oficina usa la misma regla.
+    const agent = (body: unknown) =>
+      laura.call("/settings/agent", "PATCH", body);
+    expect((await agent({ businessHours: split })).status).toBe(200);
+    expect((await agent({ businessHours: [...split, { weekday: day, startMinute: 10 * 60, endMinute: 17 * 60 }] })).status).toBe(400);
+  });
+
+  it("vacaciones de un vendedor y cierre de oficina: quitan horarios y avisan de las citas que hay que mover", async () => {
+    const laura = await login("laura@demo.mx");
+    const miguel = await login("miguel@demo.mx");
+    await createProspect("p-0001", "u-miguel");
+    await createProspect("p-0002", "u-ana");
+    await laura.call("/availability/u-miguel", "PUT", { rules: EVERY_DAY });
+    await laura.call("/availability/u-ana", "PUT", { rules: EVERY_DAY });
+    const anaSlots = await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0002`);
+    const booked = await laura.json("/appointments", "POST", { prospectId: "p-0002", startsAt: anaSlots.find((s: { time: string }) => s.time === "10:00").startsAt });
+
+    // Miguel registra sus vacaciones: ya no se le ofrecen horarios esos días (ni la IA ni el panel).
+    const vac = await miguel.call("/time-off", "POST", { userId: "u-miguel", startDate: tomorrow(), endDate: addDays(tomorrow(), 2), reason: "Vacaciones" });
+    expect(vac.status).toBe(201);
+    expect((await vac.json()).conflicts).toEqual([]);
+    expect(await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0001`)).toEqual([]);
+    expect(times(await laura.json(`/appointments/slots?date=${addDays(tomorrow(), 3)}&prospectId=p-0001`))).toContain("10:00");
+
+    // Un vendedor no cierra la oficina ni registra días de otros.
+    expect((await miguel.call("/time-off", "POST", { userId: null, startDate: tomorrow(), endDate: tomorrow() })).status).toBe(403);
+    expect((await miguel.call("/time-off", "POST", { userId: "u-ana", startDate: tomorrow(), endDate: tomorrow() })).status).toBe(403);
+    expect((await laura.call("/time-off", "POST", { userId: null, startDate: tomorrow(), endDate: todayIn(TZ) })).status).toBe(400);
+    expect((await laura.call("/time-off", "POST", { userId: null, startDate: "2026-02-30", endDate: "2026-03-01" })).status).toBe(400);
+
+    // La gerente cierra la oficina mañana: la cita de Ana sigue (no se cancela sola) pero se reporta para moverla.
+    const close = await laura.json("/time-off", "POST", { userId: null, startDate: tomorrow(), endDate: tomorrow(), reason: "Día festivo" });
+    expect(close.conflicts).toEqual([expect.objectContaining({ id: booked.id, userName: "Ana Ruiz", prospectName: "Prospecto p-0002" })]);
+    expect(close.conflicts[0].label).toContain("10:00");
+    expect(await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0002`)).toEqual([]);
+
+    // El vendedor ve sus días y los de la oficina; solo puede quitar los suyos.
+    const list = await miguel.json("/time-off");
+    expect(list.map((t: { reason: string }) => t.reason).sort()).toEqual(["Día festivo", "Vacaciones"]);
+    expect((await miguel.call(`/time-off/${close.timeOff.id}`, "DELETE")).status).toBe(403);
+    expect((await laura.call(`/time-off/${close.timeOff.id}`, "DELETE")).status).toBe(204);
+    expect(times(await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0002`))).toContain("11:00");
+  });
+
+  it("cierre de oficina: la IA promete el contacto para el siguiente día que sí abre", () => {
+    // 2026-10-09 viernes 19:00, horario L–V 9–18; el lunes 12 es festivo → martes 13.
+    const OFFICE = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startMinute: 540, endMinute: 1080 }));
+    const now = localToEpoch("2026-10-09", 19 * 60, TZ);
+    expect(advisorEta(OFFICE, TZ, now)).toBe("el lunes 12 de octubre a partir de las 9:00");
+    expect(advisorEta(OFFICE, TZ, now, new Set(["2026-10-12"]))).toBe("el martes 13 de octubre a partir de las 9:00");
+    // En horario, pero hoy está cerrado: no dice "en breve".
+    expect(advisorEta(OFFICE, TZ, localToEpoch("2026-10-12", 10 * 60, TZ), new Set(["2026-10-12"]))).toBe("mañana a partir de las 9:00");
   });
 });

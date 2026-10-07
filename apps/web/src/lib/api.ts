@@ -4,6 +4,8 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  TimeOff,
+  TimeOffConflict,
   TenantUsage,
   FollowupSettings,
   ManagedUser,
@@ -399,6 +401,27 @@ export function useSaveAvailability() {
     mutationFn: ({ userId, rules }: { userId: string; rules: AvailabilityRule[] }) =>
       call(`/availability/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify({ rules }) }),
     onSuccess: () => invalidate("availability", "slots"),
+  });
+}
+
+export const useTimeOff = () => useApiQuery<TimeOff[]>(["time-off"], "/time-off");
+
+export function useAddTimeOff() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: { userId: string | null; startDate: string; endDate: string; reason?: string }) =>
+      call<{ timeOff: TimeOff; conflicts: TimeOffConflict[] }>("/time-off", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("time-off", "slots", "agent-settings"),
+  });
+}
+
+export function useRemoveTimeOff() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (id: string) => call(`/time-off/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSuccess: () => invalidate("time-off", "slots", "agent-settings"),
   });
 }
 

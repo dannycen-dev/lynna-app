@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ChatMessage, Completion, LlmClient } from "../src/agent/llm";
 import { FALLBACK_REPLY, MEDIA_REPLY, OPT_OUT_REPLY } from "../src/agent/prompt";
-import { runAgent, type AgentInput } from "../src/agent/runner";
+import { runAgent, withoutAdvisorOffer, type AgentInput } from "../src/agent/runner";
 import { getDb } from "../src/db/client";
 
 /** Separa el seed en sentencias (igual que seed.test.ts). */
@@ -138,6 +138,16 @@ describe("runner del agente", () => {
     expect(r.escalation).toBe("compra");
     expect(r.reply).toContain("Un asesor te contactará en breve");
     expect(await prospectRow()).toMatchObject({ stage: "ready_to_buy", score: 100, handoff_reason: "compra" });
+  });
+
+  it("ya turnado: no le ofrece un asesor como pregunta, le dice cuándo lo contactarán", async () => {
+    const llm = scripted([text("¡Excelente decisión! ¿Quieres que un asesor te contacte para darte los detalles?")]);
+    const r = await runAgent(await input(llm, "Quiero comprar"));
+    expect(r.escalation).toBe("compra");
+    expect(r.reply).toBe("¡Excelente decisión!\n\nUn asesor te contactará en breve para ayudarte con eso.");
+    // Una pregunta sobre el asesor que no es oferta se respeta.
+    expect(withoutAdvisorOffer("¿Tu asesor ya te mandó el plano? Va.")).toBe("¿Tu asesor ya te mandó el plano? Va.");
+    expect(withoutAdvisorOffer("Claro. ¿Te gustaría que te llame un asesor hoy?")).toBe("Claro.");
   });
 
   it("archivos del prospecto nunca pasan por el modelo", async () => {

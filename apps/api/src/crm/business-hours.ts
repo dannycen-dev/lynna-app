@@ -10,20 +10,23 @@ const minutesOf = (time: string) => {
   return (h ?? 0) * 60 + (m ?? 0);
 };
 
-export function isOpen(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now()): boolean {
+/** `closed`: fechas locales en que la oficina cierra (días festivos, vacaciones colectivas). */
+export function isOpen(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now(), closed?: Set<string>): boolean {
   if (!hours?.length) return true; // sin horario configurado: no se promete nada distinto
   const { date, time } = localParts(now, timeZone);
+  if (closed?.has(date)) return false;
   const weekday = weekdayOf(date);
   const minute = minutesOf(time);
   return hours.some((h) => h.weekday === weekday && minute >= h.startMinute && minute < h.endMinute);
 }
 
-/** Próxima apertura (epoch ms) en los siguientes 8 días; null si el horario está vacío. */
-export function nextOpening(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now()): number | null {
+/** Próxima apertura (epoch ms) en los siguientes 31 días; null si el horario está vacío. */
+export function nextOpening(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now(), closed?: Set<string>): number | null {
   if (!hours?.length) return null;
   const today = todayIn(timeZone, new Date(now));
-  for (let i = 0; i <= 8; i++) {
+  for (let i = 0; i <= 31; i++) {
     const date = addDays(today, i);
+    if (closed?.has(date)) continue;
     const weekday = weekdayOf(date);
     const starts = hours
       .filter((h) => h.weekday === weekday)
@@ -39,9 +42,9 @@ export function nextOpening(hours: BusinessHours | null | undefined, timeZone: s
  * Cuándo contactará un asesor: "en breve" (oficina abierta o sin horario), o "hoy a partir de las 16:00",
  * "mañana a partir de las 9:00", "el lunes 12 de octubre a partir de las 9:00".
  */
-export function advisorEta(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now()): string {
-  if (isOpen(hours, timeZone, now)) return "en breve";
-  const next = nextOpening(hours, timeZone, now);
+export function advisorEta(hours: BusinessHours | null | undefined, timeZone: string, now = Date.now(), closed?: Set<string>): string {
+  if (isOpen(hours, timeZone, now, closed)) return "en breve";
+  const next = nextOpening(hours, timeZone, now, closed);
   if (!next) return "en breve";
   const { date, time } = localParts(next, timeZone);
   const today = todayIn(timeZone, new Date(now));

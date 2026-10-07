@@ -1561,16 +1561,43 @@ textarea {
 }
 .availability-grid {
   display: grid;
-  grid-template-columns: 120px repeat(2, minmax(0, 150px));
-  gap: 6px 10px;
-  align-items: center;
+  gap: 6px;
 }
-.availability-grid .input {
+.availability-day {
+  display: grid;
+  grid-template-columns: 120px minmax(0, auto) auto;
+  justify-content: start;
+  gap: 10px;
+  align-items: start;
+}
+.availability-day > label {
+  min-height: 32px;
+}
+.availability-ranges {
+  display: grid;
+  gap: 4px;
+}
+.availability-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.availability-range .input {
   height: 32px;
+  width: 130px;
 }
 @media (max-width: 640px) {
-  .availability-grid {
-    grid-template-columns: 1fr 1fr 1fr;
+  .availability-day {
+    grid-template-columns: 1fr auto;
+  }
+  .availability-ranges {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .availability-range .input {
+    width: auto;
+    flex: 1;
+    min-width: 0;
   }
 }
 
@@ -1654,4 +1681,11 @@ a.navbar__user {
 }
 a.navbar__user:hover {
   background: rgb(255 255 255 / 0.08);
+}
+
+/* ── Días libres ───────────────────────────────────────────────────────────── */
+.list-plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }

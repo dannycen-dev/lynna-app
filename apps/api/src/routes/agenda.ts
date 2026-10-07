@@ -1,12 +1,12 @@
-import { aliasedTable, and, asc, eq, gte, inArray, lt, ne } from "drizzle-orm";
+import { aliasedTable, and, asc, eq, gte, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { actorOf, canWrite, type AuthVariables } from "../auth/middleware";
-import { bookAppointment, freeSlots, localParts, localToEpoch, replaceAvailability, sellersForProspect, setAppointmentStatus, slotLabel } from "../crm/agenda";
+import { bookAppointment, freeSlots, localParts, localToEpoch, replaceAvailability, sellersForProspect, setAppointmentStatus, slotLabel, weekRules } from "../crm/agenda";
 import { isSeller, prospectScope } from "../crm/assignment";
 import { getDb } from "../db/client";
-import { appointments, availabilityRules, developments, prospects, tenants, users } from "../db/schema";
-import { addDays, todayIn } from "../financing/dates";
+import { appointments, availabilityRules, developments, prospects, tenants, timeOff, users } from "../db/schema";
+import { addDays, parseIsoDate, todayIn } from "../financing/dates";
 import { auditInsert } from "../lib/audit";
 
 // Agenda de citas en el panel. Un vendedor ve y gestiona solo sus citas y su horario;
@@ -175,13 +175,91 @@ agenda.put("/availability/:userId", async (c) => {
   const userId = c.req.param("userId");
   // Cada vendedor puede ajustar su propio horario; el de otros, solo gerente o dueño.
   if (isSeller(c.var.principal) && userId !== selfId(c)) return c.json({ error: "forbidden", message: "Solo puedes cambiar tu propio horario." }, 403);
-  const parsed = await readBody(c, z.object({ rules: z.array(rule).max(21) }));
+  const parsed = await readBody(c, z.object({ rules: weekRules(rule) }));
   if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
   const db = getDb(c.env.DB);
   const member = await db.select({ id: users.id }).from(users).where(and(eq(users.id, userId), eq(users.tenantId, c.var.tenant.id))).get();
   if (!member) return c.json({ error: "not_found" }, 404);
   await replaceAvailability(db, { tenantId: c.var.tenant.id, userId, rules: parsed.data.rules, actor: actorOf(c.var.principal) });
   return c.json({ userId, rules: parsed.data.rules });
+});
+
+// ── Días libres (vacaciones, permisos, días festivos) ─────────────────────────
+
+agenda.get("/time-off", async (c) => {
+  const tenant = c.var.tenant;
+  const me = isSeller(c.var.principal) ? selfId(c) : null;
+  const rows = await getDb(c.env.DB)
+    .select({ timeOff, userName: users.name })
+    .from(timeOff)
+    .leftJoin(users, eq(users.id, timeOff.userId))
+    .where(and(eq(timeOff.tenantId, tenant.id), gte(timeOff.endDate, todayIn(tenant.timezone)), me ? or(isNull(timeOff.userId), eq(timeOff.userId, me)) : undefined))
+    .orderBy(asc(timeOff.startDate));
+  return c.json(rows.map((r) => ({ ...r.timeOff, userName: r.userName })));
+});
+
+const isoDate = z.string().refine((v) => {
+  try {
+    parseIsoDate(v);
+    return true;
+  } catch {
+    return false;
+  }
+}, "Fecha inválida.");
+
+agenda.post("/time-off", async (c) => {
+  const tenant = c.var.tenant;
+  const parsed = await readBody(
+    c,
+    z
+      .object({ userId: z.string().nullable(), startDate: isoDate, endDate: isoDate, reason: z.string().trim().max(120).optional() })
+      .refine((v) => v.endDate >= v.startDate, { message: "La fecha final no puede ser antes de la inicial.", path: ["endDate"] })
+      // `when`: solo con fechas válidas (addDays lanza con "2026-02-30").
+      .refine((v) => v.endDate <= addDays(v.startDate, 365), { message: "Máximo un año.", path: ["endDate"], when: (p) => p.issues.length === 0 }),
+  );
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const { userId, startDate, endDate, reason } = parsed.data;
+  // Un vendedor registra solo sus propios días; cerrar la oficina o dar días a otros es de gerente o dueño.
+  if (isSeller(c.var.principal) && userId !== selfId(c)) return c.json({ error: "forbidden", message: "Solo puedes registrar tus propios días libres." }, 403);
+  const db = getDb(c.env.DB);
+  if (userId) {
+    const member = await db.select({ id: users.id }).from(users).where(and(eq(users.id, userId), eq(users.tenantId, tenant.id))).get();
+    if (!member) return c.json({ error: "not_found" }, 404);
+  }
+  const actor = actorOf(c.var.principal);
+  const [inserted] = await db.batch([
+    db.insert(timeOff).values({ tenantId: tenant.id, userId, startDate, endDate, reason: reason || null, createdBy: actor }).returning(),
+    auditInsert(db, { tenantId: tenant.id, actor, entity: userId ? "user" : "tenant", entityId: userId ?? tenant.id, action: "time_off_added", data: { startDate, endDate, reason } }),
+  ]);
+  // Las citas ya agendadas en esos días NO se cancelan solas: se devuelven para que alguien las mueva.
+  const conflicts = await db
+    .select({ id: appointments.id, startsAt: appointments.startsAt, prospectName: prospects.name, prospectPhone: prospects.phone, userName: seller.name })
+    .from(appointments)
+    .innerJoin(prospects, eq(prospects.id, appointments.prospectId))
+    .innerJoin(seller, eq(seller.id, appointments.userId))
+    .where(
+      and(
+        eq(appointments.tenantId, tenant.id),
+        eq(appointments.status, "scheduled"),
+        gte(appointments.startsAt, localToEpoch(startDate, 0, tenant.timezone)),
+        lt(appointments.startsAt, localToEpoch(addDays(endDate, 1), 0, tenant.timezone)),
+        userId ? eq(appointments.userId, userId) : undefined,
+      ),
+    )
+    .orderBy(asc(appointments.startsAt));
+  return c.json({ timeOff: inserted[0], conflicts: conflicts.map((a) => ({ ...a, label: slotLabel(a.startsAt, tenant.timezone) })) }, 201);
+});
+
+agenda.delete("/time-off/:id", async (c) => {
+  const db = getDb(c.env.DB);
+  const row = await db.select().from(timeOff).where(and(eq(timeOff.id, c.req.param("id")), eq(timeOff.tenantId, c.var.tenant.id))).get();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  if (isSeller(c.var.principal) && row.userId !== selfId(c)) return c.json({ error: "forbidden", message: "Solo puedes quitar tus propios días libres." }, 403);
+  await db.batch([
+    db.delete(timeOff).where(eq(timeOff.id, row.id)),
+    auditInsert(db, { tenantId: row.tenantId, actor: actorOf(c.var.principal), entity: row.userId ? "user" : "tenant", entityId: row.userId ?? row.tenantId, action: "time_off_removed", data: { startDate: row.startDate, endDate: row.endDate } }),
+  ]);
+  return c.body(null, 204);
 });
 
 agenda.patch("/settings/appointments", async (c) => {

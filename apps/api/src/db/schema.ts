@@ -454,6 +454,24 @@ export const availabilityRules = sqliteTable(
   (t) => [index("availability_user_idx").on(t.userId, t.weekday)],
 );
 
+// Días libres: vacaciones o permisos de un vendedor (user_id) o cierre de toda la oficina (user_id NULL,
+// p. ej. 1 de enero). Fechas locales "AAAA-MM-DD", ambas inclusive. Quitan esos días de los horarios de
+// citas y, si es cierre de oficina, del horario de atención (lo que la IA promete al turnar).
+export const timeOff = sqliteTable(
+  "time_off",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    reason: text("reason"),
+    createdBy: text("created_by").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("time_off_tenant_idx").on(t.tenantId, t.endDate)],
+);
+
 export const APPOINTMENT_STATUSES = ["scheduled", "completed", "no_show", "cancelled"] as const;
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 

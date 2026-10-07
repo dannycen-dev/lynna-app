@@ -251,6 +251,9 @@ export type Slot = { userId: string; userName: string; startsAt: number; endsAt:
 
 export type AvailabilityRule = { weekday: number; startMinute: number; endMinute: number };
 
+export type TimeOff = { id: string; userId: string | null; userName: string | null; startDate: string; endDate: string; reason: string | null };
+export type TimeOffConflict = { id: string; startsAt: number; label: string; prospectName: string | null; prospectPhone: string; userName: string };
+
 export type Availability = {
   timezone: string;
   appointmentMinutes: number;

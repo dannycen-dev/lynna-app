@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, MessageSquareReply, Plus, ShieldCheck, Shuffle, Trash2, Users } from "lucide-react";
+import { Bot, CalendarClock, CalendarOff, MessageSquareReply, Plus, ShieldCheck, Shuffle, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import {
@@ -7,6 +7,9 @@ import {
   useFollowupSettings,
   useSaveFollowupSettings,
   useAvailability,
+  useAddTimeOff,
+  useRemoveTimeOff,
+  useTimeOff,
   useSaveAgentSettings,
   usePrivacySettings,
   useSavePrivacySettings,
@@ -16,9 +19,9 @@ import {
   useUpdateAssignmentSettings,
   useUpdateTeamMember,
 } from "../lib/api";
-import { ROLE_LABEL, timeAgo } from "../lib/format";
+import { isoDate, ROLE_LABEL, timeAgo, todayMx } from "../lib/format";
 import { useWeekHours, WeekHoursGrid } from "../components/WeekHours";
-import type { AvailabilityRule, FollowupStep } from "../lib/types";
+import type { AvailabilityRule, FollowupStep, TimeOffConflict } from "../lib/types";
 import { useSession } from "../lib/session";
 
 export function Configuracion() {
@@ -33,6 +36,7 @@ export function Configuracion() {
         <AssignmentCard disabled={!canWrite} />
         <TeamCard disabled={!canWrite} />
         <AvailabilityCard canWrite={canWrite} />
+        <TimeOffCard canWrite={canWrite} />
         <PrivacyCard disabled={!canWrite} />
       </div>
     </div>
@@ -230,6 +234,113 @@ function MemberSchedule({ member }: { member: { id: string; name: string; role: 
       <WeekHoursGrid hours={hours} dayLabel={(day) => `${member.name} atiende el ${day}`} />
       <ErrorAlert error={save.error} />
     </section>
+  );
+}
+
+function TimeOffCard({ canWrite }: { canWrite: boolean }) {
+  const { me } = useSession();
+  const list = useTimeOff();
+  const members = useAvailability().data?.members ?? [];
+  const add = useAddTimeOff();
+  const remove = useRemoveTimeOff();
+  const myId = me?.user.id ?? "";
+  // "" = toda la oficina (solo gerente o dueño); un vendedor solo registra los suyos.
+  const [who, setWho] = useState(canWrite ? "" : myId);
+  const [from, setFrom] = useState(todayMx());
+  const [to, setTo] = useState(todayMx());
+  const [reason, setReason] = useState("");
+  const [conflicts, setConflicts] = useState<TimeOffConflict[] | null>(null);
+  useEffect(() => {
+    if (!canWrite && myId) setWho(myId);
+  }, [canWrite, myId]);
+  const invalid = !from || !to || to < from;
+  const submit = () =>
+    add.mutate(
+      { userId: who || null, startDate: from, endDate: to, reason: reason.trim() || undefined },
+      {
+        onSuccess: (r) => {
+          setConflicts(r.conflicts);
+          setReason("");
+        },
+      },
+    );
+  const range = (a: string, b: string) => (a === b ? isoDate(a) : `${isoDate(a)} al ${isoDate(b)}`);
+  return (
+    <div className="card">
+      <div className="card__header">
+        <CalendarOff size={16} /> Días libres y días festivos
+      </div>
+      <div className="card__body stack">
+        <p className="muted" style={{ margin: 0 }}>
+          Vacaciones o permisos de un vendedor, o días en que cierra toda la oficina. Esos días la IA no ofrece visitas con esa persona; si cierra la oficina, tampoco promete que un asesor contactará ese día.
+        </p>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="field">
+            <label htmlFor="off-who">Quién</label>
+            <select id="off-who" className="select" value={who} onChange={(e) => setWho(e.target.value)} disabled={!canWrite}>
+              {canWrite && <option value="">Toda la oficina</option>}
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="off-from">Desde</label>
+            <input id="off-from" className="input" type="date" value={from} min={todayMx()} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="off-to">Hasta</label>
+            <input id="off-to" className="input" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          <div className="field" style={{ flex: 1, minWidth: 180 }}>
+            <label htmlFor="off-reason">Motivo (opcional)</label>
+            <input id="off-reason" className="input" value={reason} maxLength={120} placeholder="Vacaciones, día festivo…" onChange={(e) => setReason(e.target.value)} />
+          </div>
+          <button className="btn btn--primary" disabled={invalid || add.isPending} onClick={submit}>
+            <Plus size={14} /> Agregar
+          </button>
+        </div>
+        {invalid && from && to && <div className="alert alert--error">La fecha final no puede ser antes de la inicial.</div>}
+        <ErrorAlert error={add.error ?? remove.error ?? list.error} />
+        {conflicts && conflicts.length > 0 && (
+          <div className="alert alert--warning" role="status">
+            <strong>
+              {conflicts.length === 1 ? "Hay 1 cita" : `Hay ${conflicts.length} citas`} en esos días. No se cancelan solas: muévelas desde Citas.
+            </strong>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+              {conflicts.map((c) => (
+                <li key={c.id}>
+                  {c.label} — {c.prospectName ?? c.prospectPhone} con {c.userName}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {list.isPending ? (
+          <Spinner />
+        ) : list.data?.length ? (
+          <ul className="list-plain" aria-label="Próximos días libres">
+            {list.data.map((t) => (
+              <li key={t.id} className="row" style={{ justifyContent: "space-between", gap: 8, padding: "6px 0", borderTop: "1px solid var(--lynna-divider)" }}>
+                <span>
+                  <strong>{t.userName ?? "Toda la oficina"}</strong> · {range(t.startDate, t.endDate)}
+                  {t.reason && <span className="muted"> · {t.reason}</span>}
+                </span>
+                {(canWrite || t.userId === myId) && (
+                  <button className="btn btn--ghost btn--sm" disabled={remove.isPending} onClick={() => remove.mutate(t.id)} aria-label={`Quitar ${t.userName ?? "cierre de oficina"} ${range(t.startDate, t.endDate)}`}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted" style={{ margin: 0 }}>No hay días libres registrados.</p>
+        )}
+      </div>
+    </div>
   );
 }
 

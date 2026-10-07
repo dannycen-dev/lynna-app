@@ -77,7 +77,7 @@ admin.use("/tenants/:tenant/*", async (c, next) => {
   // conversaciones, avisos). No modifican inventario, planes ni importaciones.
   const path = c.req.path;
   const sellerAllowed =
-    path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications|appointments|availability)(\/|$)/.test(path);
+    path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications|appointments|availability|time-off)(\/|$)/.test(path);
   if (c.req.method !== "GET" && !sellerAllowed && !canWrite(c.var.principal)) {
     return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
   }

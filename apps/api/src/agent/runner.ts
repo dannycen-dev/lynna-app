@@ -10,6 +10,7 @@ import { detectEscalation, isOptOut } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
 import { buildSystemPrompt, fallbackReply, mediaReply, OPT_OUT_REPLY } from "./prompt";
 import { advisorEta } from "../crm/business-hours";
+import { officeClosedDates } from "../crm/time-off";
 import { CONSENT_QUESTION, isAffirmative, isNegative, mentionsFinancialData, privacyNotice, recordConsent } from "../privacy/consent";
 import { escalate, newFacts, rememberSlot, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
 
@@ -81,7 +82,9 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
 
   // Horario de atención: qué se le promete al prospecto cuando se turna a un asesor. Esa hora y fecha
   // salen del sistema, así que cuentan como datos verificados para el validador.
-  const eta = advisorEta(tenantRow?.businessHours, tenantRow?.timezone ?? "America/Mexico_City");
+  const tz = tenantRow?.timezone ?? "America/Mexico_City";
+  const closed = tenantRow?.businessHours?.length ? await officeClosedDates(input.db, input.tenant.id, tz) : undefined;
+  const eta = advisorEta(tenantRow?.businessHours, tz, Date.now(), closed);
   ctx.advisorEta = eta;
   rememberSlot(ctx.facts, eta.replace(/(\d{1,2}):(\d{2})$/, (_, h: string, m: string) => `${h.padStart(2, "0")}:${m}`));
 
@@ -264,8 +267,23 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   const detected = detectEscalation(incomingText);
   if (detected && !ctx.escalation) {
     await escalate(ctx, detected, `Detectado por reglas en: "${incomingText.slice(0, 200)}"`);
-    if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará ${eta} para ayudarte con eso.`;
+  }
+  // Ya se turnó: ofrecer "¿quieres que un asesor te contacte?" confunde (ya va a pasar). Se quita la oferta y,
+  // si no queda ninguna mención del asesor, se dice cuándo lo contactarán.
+  if (ctx.escalation) {
+    reply = withoutAdvisorOffer(reply);
+    if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará ${eta} para ayudarte con eso.`.trim();
   }
 
   return done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });
+}
+
+/** Quita las preguntas que ofrecen un asesor ("¿Quieres que un asesor te contacte?", "¿Te gustaría que te llame un asesor?"). */
+export function withoutAdvisorOffer(reply: string) {
+  return reply
+    .replace(/¿[^¿?]*\b(asesor|ejecutivo|vendedor)[^¿?]*\?/giu, (q) => (/\b(quier|gustar|prefier|desea|te parece|puedo pedir)/iu.test(q) ? "" : q))
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
