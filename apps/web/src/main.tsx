@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from "react-router";
 import { Layout } from "./components/Layout";
 import { Empty, Spinner } from "./components/ui";
+import { Agenda } from "./pages/Agenda";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
 import { Configuracion } from "./pages/Configuracion";
 import { Home } from "./pages/Home";
@@ -67,6 +68,7 @@ const router = createBrowserRouter([
       { path: "prospectos", element: <Prospectos /> },
       { path: "prospectos/:id", element: <ProspectoFicha /> },
       { path: "agente", element: <Simulador /> },
+      { path: "citas", element: <Agenda /> },
       { path: "ajustes", element: <Configuracion /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],

@@ -39,6 +39,24 @@ export const fakeLlm: LlmClient = {
       if (!result("escalar_a_asesor")) return call("escalar_a_asesor", { motivo: "compra", detalle: "Quiere comprar (modelo de prueba)." });
       return say("¡Qué gusto! Un asesor te contactará en breve para ayudarte con el apartado.");
     }
+    if (/\b(visita|visitar|cita|agendar|agenda|agendame)\b/.test(text)) {
+      if (/\bcancel/.test(text)) {
+        if (!result("cancelar_cita")) return call("cancelar_cita", { motivo: "El prospecto la canceló (modelo de prueba)." });
+        return say("Listo, cancelé tu visita. Cuando quieras la reagendamos.");
+      }
+      const booking = /(\d{4}-\d{2}-\d{2})\D+(\d{1,2}:\d{2})/.exec(text);
+      if (booking) {
+        const booked = result("agendar_visita");
+        if (!booked) return call("agendar_visita", { fecha: booking[1], hora: booking[2] });
+        const parsed = JSON.parse(booked) as { ok?: boolean; cita?: string };
+        return say(parsed.ok ? `¡Listo! Tu visita quedó agendada para el ${parsed.cita}. Un asesor te recibirá.` : "Ese horario ya no está disponible. ¿Te busco otro?");
+      }
+      const slots = result("horarios_disponibles");
+      if (!slots) return call("horarios_disponibles", {});
+      const horarios = (JSON.parse(slots).horarios ?? []) as { fecha: string; hora: string; etiqueta: string }[];
+      if (horarios.length === 0) return say("Por ahora no tengo horarios de visita; un asesor te contactará para agendar.");
+      return say(`Tengo estos horarios para visitar el desarrollo: ${horarios.slice(0, 3).map((h) => `${h.etiqueta} (${h.fecha} ${h.hora})`).join("; ")}. ¿Cuál te acomoda?`);
+    }
     if (/\b(lote|lotes|terreno|terrenos|disponible)\b/.test(text)) {
       const found = result("buscar_lotes");
       if (!found) return call("buscar_lotes", {});

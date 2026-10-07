@@ -2,7 +2,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { CatalogError, getLot, plansForDevelopment, searchAvailableLots, simulateForLot } from "../catalog/service";
 import type { Db } from "../db/client";
-import { developments, lots, notifications, paymentPlans, prospects } from "../db/schema";
+import { bookAppointment, freeSlots, localParts, localToEpoch, parseTime, sellersForProspect, setAppointmentStatus, slotLabel, upcomingAppointment } from "../crm/agenda";
+import { developments, lots, notifications, paymentPlans, prospects, tenants } from "../db/schema";
 import { todayIn, type Breakdown } from "../financing";
 
 type PaymentPlan = typeof paymentPlans.$inferSelect;
@@ -19,9 +20,27 @@ export type Facts = {
   lots: Set<string>;
   /** Montos verificados, en pesos enteros. */
   amounts: Set<number>;
+  /** Horas ("10:00") que salieron de la agenda: horarios libres, la cita agendada o la que ya tenía. */
+  times: Set<string>;
+  /** Fechas ("9 de octubre") que salieron de la agenda. */
+  dates: Set<string>;
+  /** agendar_visita respondió ok en este turno: solo así se puede decir que se agendó o se cambió. */
+  booked: boolean;
+  /** cancelar_cita respondió ok en este turno: solo así se puede decir que se canceló. */
+  cancelled: boolean;
+  /** El prospecto ya tenía una cita vigente antes de este turno (se puede recordar, no inventar otra). */
+  existing: boolean;
 };
 
-export const newFacts = (): Facts => ({ lots: new Set(), amounts: new Set() });
+export const newFacts = (): Facts => ({ lots: new Set(), amounts: new Set(), times: new Set(), dates: new Set(), booked: false, cancelled: false, existing: false });
+
+/** "viernes 9 de octubre, 16:00" → hora y fecha verificadas. */
+export function rememberSlot(facts: Facts, label: string) {
+  const m = /(\d{1,2}) de ([a-záéíóú]+)/i.exec(label);
+  if (m) facts.dates.add(`${m[1]} de ${m[2]!.toLowerCase()}`);
+  const t = /(\d{2}:\d{2})$/.exec(label);
+  if (t) facts.times.add(t[1]!);
+}
 
 export type EscalationReason = "compra" | "descuento" | "legal" | "pago" | "queja" | "documentos" | "otro";
 
@@ -148,6 +167,31 @@ export const TOOL_SPECS: ToolSpec[] = [
         desarrollo_interes: { type: "string" },
       },
     },
+  },
+  {
+    name: "horarios_disponibles",
+    description:
+      "Horarios libres para visitar el desarrollo con un asesor. Úsala antes de proponer cualquier día u hora. Sin fecha devuelve opciones de los próximos días.",
+    parameters: { type: "object", properties: { fecha: { type: "string", description: "Día que pidió el prospecto, formato YYYY-MM-DD (opcional)." } } },
+  },
+  {
+    name: "agendar_visita",
+    description:
+      "Agenda la visita en un horario que devolvió horarios_disponibles y que el prospecto eligió. Si ya tenía cita, la cambia a este horario. Solo confirma la cita si responde ok.",
+    parameters: {
+      type: "object",
+      properties: {
+        fecha: { type: "string", description: "YYYY-MM-DD" },
+        hora: { type: "string", description: "HH:MM en formato de 24 horas, como la devolvió horarios_disponibles." },
+        desarrollo: { type: "string" },
+      },
+      required: ["fecha", "hora"],
+    },
+  },
+  {
+    name: "cancelar_cita",
+    description: "Cancela la visita agendada del prospecto cuando él lo pide. Llámala SIEMPRE antes de decirle que su visita quedó cancelada.",
+    parameters: { type: "object", properties: { motivo: { type: "string" } } },
   },
   {
     name: "escalar_a_asesor",
@@ -341,6 +385,86 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
       return { ok: true, guardado: Object.keys(a) };
     }
 
+    case "horarios_disponibles": {
+      const tenant = await loadTenant(db, tenantId);
+      const [prospect] = await db.select().from(prospects).where(eq(prospects.id, ctx.prospectId));
+      const fecha = str(args.fecha);
+      if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { error: "Fecha inválida; usa YYYY-MM-DD." };
+      const userIds = prospect ? await sellersForProspect(db, prospect) : undefined;
+      const slots = await freeSlots(db, tenant, { ...(fecha ? { fromDate: fecha, days: 1 } : { days: 14 }), ...(userIds ? { userIds } : {}) });
+      // Un horario por hora (aunque haya varios vendedores libres). Sin fecha: a lo más dos por día y seis en
+      // total, para proponer. Con fecha: todo el día, para poder confirmar la hora exacta que pida el prospecto.
+      const seen = new Set<number>();
+      const perDay = new Map<string, number>();
+      const options = [];
+      for (const s of slots) {
+        if (seen.has(s.startsAt)) continue;
+        seen.add(s.startsAt);
+        const { date, time } = localParts(s.startsAt, tenant.timezone);
+        if (!fecha && (perDay.get(date) ?? 0) >= 2) continue;
+        perDay.set(date, (perDay.get(date) ?? 0) + 1);
+        const etiqueta = slotLabel(s.startsAt, tenant.timezone);
+        rememberSlot(facts, etiqueta);
+        options.push({ fecha: date, hora: time, etiqueta });
+        if (options.length >= (fecha ? 24 : 6)) break;
+      }
+      if (options.length === 0) {
+        return { horarios: [], mensaje: fecha ? "No hay horarios libres ese día. Ofrece buscar otro día." : "No hay horarios configurados. Ofrece que un asesor lo contacte para agendar." };
+      }
+      return {
+        horarios: options,
+        duracion_min: tenant.appointmentMinutes,
+        nota: fecha
+          ? "Son todos los horarios libres de ese día. Si la hora que pidió está en la lista, agéndala con agendar_visita; si no, ofrece las más cercanas."
+          : "Ofrece 2 o 3 opciones con su etiqueta; agenda solo la que elija.",
+      };
+    }
+
+    case "agendar_visita": {
+      const tenant = await loadTenant(db, tenantId);
+      const fecha = str(args.fecha);
+      const minute = parseTime(str(args.hora) ?? "");
+      if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || minute === null) return { error: "Indica fecha (YYYY-MM-DD) y hora (HH:MM) de horarios_disponibles." };
+      const dev = str(args.desarrollo) ? (await findDevelopment(db, tenantId, str(args.desarrollo))).match : undefined;
+      const result = await bookAppointment(db, {
+        tenant,
+        prospectId: ctx.prospectId,
+        startsAt: localToEpoch(fecha, minute, tenant.timezone),
+        developmentId: dev?.id ?? null,
+        source: "ai",
+        actor: "ai",
+      });
+      if (!result.ok) {
+        return { error: result.error === "taken" ? "Ese horario se acaba de ocupar." : "Ese horario ya no está disponible.", mensaje: "Ofrece otros horarios con horarios_disponibles." };
+      }
+      facts.booked = true;
+      const cita = slotLabel(result.appointment.startsAt, tenant.timezone);
+      rememberSlot(facts, cita);
+      return {
+        ok: true,
+        cita,
+        ...(result.replaced ? { reagendada: true } : {}),
+        mensaje: "Confirma la fecha y hora al prospecto; un asesor lo recibirá. No prometas nada más.",
+      };
+    }
+
+    case "cancelar_cita": {
+      const current = await upcomingAppointment(db, ctx.prospectId);
+      if (!current) return { ok: true, mensaje: "El prospecto no tiene una cita agendada." };
+      await setAppointmentStatus(db, { tenantId, appointmentId: current.id, status: "cancelled", reason: (str(args.motivo) ?? "Cancelada por el prospecto").slice(0, 300), actor: "ai" });
+      await db.insert(notifications).values({
+        tenantId,
+        userId: current.userId,
+        prospectId: ctx.prospectId,
+        kind: "appointment",
+        title: "Cita cancelada por el prospecto",
+        body: str(args.motivo)?.slice(0, 300) ?? null,
+        createdAt: Date.now(),
+      });
+      facts.cancelled = true;
+      return { ok: true, mensaje: "Cita cancelada. Ofrece reagendar cuando quiera." };
+    }
+
     case "escalar_a_asesor": {
       const reason = (ESCALATION_REASONS as readonly string[]).includes(String(args.motivo)) ? (args.motivo as EscalationReason) : "otro";
       const detail = (str(args.detalle) ?? "").slice(0, 500);
@@ -351,6 +475,10 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
+}
+
+async function loadTenant(db: Db, tenantId: string) {
+  return (await db.select({ id: tenants.id, timezone: tenants.timezone, appointmentMinutes: tenants.appointmentMinutes }).from(tenants).where(eq(tenants.id, tenantId)).get())!;
 }
 
 const HANDOFF_TITLE: Record<EscalationReason, string> = {

@@ -1,9 +1,12 @@
-import { ArrowLeft, Bot, History, MessageCircle, Send, StickyNote, UserCheck, UserRoundCheck } from "lucide-react";
+import { ArrowLeft, Bot, CalendarCheck, History, MessageCircle, Send, StickyNote, UserCheck, UserRoundCheck } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
-import { Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useAddNote, useAssign, useChangeStage, useProspect, useSendHumanMessage, useTakeover, useTeam } from "../lib/api";
+import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
+import { useAddNote, useAssign, useBookAppointment, useChangeStage, useProspect, useSendHumanMessage, useSlots, useTakeover, useTeam } from "../lib/api";
 import {
+  addDaysIso,
+  APPOINTMENT_STATUS_LABEL,
+  capitalize,
   dateTime,
   HANDOFF_LABEL,
   HISTORY_LABEL,
@@ -14,9 +17,11 @@ import {
   temperature,
   TIMEFRAME_LABEL,
   timeAgo,
+  todayMx,
 } from "../lib/format";
 import { useSession } from "../lib/session";
-import type { HistoryItem, Message, Prospect, ProspectStage } from "../lib/types";
+import type { HistoryItem, Message, Prospect, ProspectDetail, ProspectStage } from "../lib/types";
+import { STATUS_TONE } from "./Agenda";
 import { displayName, formatPhone } from "./Prospectos";
 
 const AUTHOR_LABEL: Record<Message["author"], string> = { prospect: "Prospecto", ai: "IA", user: "Asesor", system: "Sistema" };
@@ -108,6 +113,7 @@ export function ProspectoFicha() {
               </dl>
             </div>
           </div>
+          <Appointments prospectId={prospect.id} appointments={detail.data.appointments} />
           <Notes prospectId={prospect.id} notes={notes} />
           <Timeline history={history} />
         </aside>
@@ -268,6 +274,96 @@ function Conversation(props: { conversationId: string; aiPaused: boolean; takenB
   );
 }
 
+function Appointments({ prospectId, appointments }: { prospectId: string; appointments: ProspectDetail["appointments"] }) {
+  const [open, setOpen] = useState(false);
+  const upcoming = appointments.find((a) => a.status === "scheduled" && a.endsAt >= Date.now());
+  return (
+    <div className="card">
+      <div className="card__header">
+        <CalendarCheck size={16} /> Citas
+        <button className="btn btn--sm" style={{ marginLeft: "auto" }} onClick={() => setOpen(true)}>
+          {upcoming ? "Reagendar" : "Agendar cita"}
+        </button>
+      </div>
+      <div className="card__body stack" style={{ gap: 8 }}>
+        {appointments.length === 0 && (
+          <p className="muted" style={{ margin: 0 }}>
+            Sin citas. La IA agenda cuando el prospecto quiere visitar el desarrollo.
+          </p>
+        )}
+        {appointments.map((a) => (
+          <div key={a.id} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+            <span>
+              <strong>{capitalize(a.label)}</strong>
+              <span className="muted" style={{ display: "block", fontSize: 12 }}>
+                {a.sellerName}
+                {a.source === "ai" ? " · la agendó la IA" : ""}
+                {a.cancelReason ? ` · ${a.cancelReason}` : ""}
+              </span>
+            </span>
+            <span className={`badge badge--${STATUS_TONE[a.status]}`}>{APPOINTMENT_STATUS_LABEL[a.status]}</span>
+          </div>
+        ))}
+      </div>
+      {open && <BookDialog prospectId={prospectId} rescheduling={Boolean(upcoming)} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function BookDialog({ prospectId, rescheduling, onClose }: { prospectId: string; rescheduling: boolean; onClose: () => void }) {
+  const { me } = useSession();
+  const team = useTeam();
+  const [date, setDate] = useState(addDaysIso(todayMx(), 1));
+  // "Cualquiera libre": el servidor ya propone primero al vendedor del prospecto si tiene horario.
+  const [userId, setUserId] = useState<string>("");
+  const slots = useSlots(date, prospectId, me?.user.role === "seller" ? null : userId || null);
+  const book = useBookAppointment();
+  return (
+    <Dialog open onClose={onClose} title={rescheduling ? "Reagendar la cita" : "Agendar cita"} footer={<button className="btn" onClick={onClose}>Cerrar</button>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="row" style={{ gap: 12, alignItems: "flex-end" }}>
+          <div className="field">
+            <label htmlFor="appt-date">Día</label>
+            <input id="appt-date" className="input" type="date" min={todayMx()} value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          {me?.user.role !== "seller" && (
+            <div className="field">
+              <label htmlFor="appt-seller">Vendedor</label>
+              <select id="appt-seller" className="select" value={userId} onChange={(e) => setUserId(e.target.value)}>
+                <option value="">Cualquiera libre</option>
+                {team.data
+                  ?.filter((u) => u.active && u.role !== "admin")
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+        </div>
+        {slots.isPending && <Spinner label="Buscando horarios…" />}
+        <ErrorAlert error={slots.error ?? book.error} />
+        {slots.data?.length === 0 && <p className="muted" style={{ margin: 0 }}>No hay horarios libres ese día. Prueba otro día o revisa los horarios en Configuración.</p>}
+        <div className="slots" role="list" aria-label="Horarios libres">
+          {slots.data?.map((s) => (
+            <button
+              key={`${s.userId}-${s.startsAt}`}
+              role="listitem"
+              className="btn btn--sm"
+              disabled={book.isPending}
+              onClick={() => book.mutate({ prospectId, startsAt: s.startsAt, userId: s.userId }, { onSuccess: onClose })}
+            >
+              {s.time}
+              {!userId && me?.user.role !== "seller" ? ` · ${s.userName}` : ""}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function Notes({ prospectId, notes }: { prospectId: string; notes: { id: string; body: string; createdAt: number; authorName: string | null }[] }) {
   const add = useAddNote(prospectId);
   const [text, setText] = useState("");
@@ -313,6 +409,7 @@ function describe(h: HistoryItem): string {
     return `${label}: ${STAGE_LABEL[String(d.from)] ?? d.from} → ${STAGE_LABEL[String(d.to)] ?? d.to}${reason}`;
   }
   if (h.action === "assigned" || h.action === "reassigned") return `${label}${d.reason ? ` — ${String(d.reason)}` : ""}`;
+  if (h.action.startsWith("appointment_")) return `${label}${d.label ? `: ${String(d.label)}` : ""}${d.reason ? ` — ${String(d.reason)}` : ""}`;
   if (h.action === "handoff") return `${label}: ${HANDOFF_LABEL[String(d.reason)] ?? d.reason}${d.detail ? ` — ${String(d.detail)}` : ""}`;
   return label;
 }

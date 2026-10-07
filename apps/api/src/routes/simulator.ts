@@ -5,7 +5,7 @@ import { respondToConversation, defaultLlm } from "../agent/respond";
 import { assignProspect } from "../crm/assignment";
 import type { AuthVariables } from "../auth/middleware";
 import { getDb } from "../db/client";
-import { aiAuditLog, auditLog, conversations, MESSAGE_STATUS_RANK, messages, prospects, tenants, waAccounts } from "../db/schema";
+import { aiAuditLog, appointments, auditLog, conversations, MESSAGE_STATUS_RANK, messages, prospects, tenants, waAccounts } from "../db/schema";
 
 // Simulador de WhatsApp: el panel conversa con el agente por el MISMO código que usan los mensajes
 // reales (respondToConversation), sin Meta. Cada usuario tiene su propia conversación de prueba.
@@ -143,6 +143,8 @@ export async function simulatorReset(c: Ctx) {
     : [];
   await db.batch([
     db.delete(auditLog).where(and(eq(auditLog.entity, "prospect"), eq(auditLog.entityId, found.prospect.id))),
+    // Las citas de prueba liberan su horario.
+    db.delete(appointments).where(eq(appointments.prospectId, found.prospect.id)),
     ...deleteConversation,
     db.delete(prospects).where(eq(prospects.id, found.prospect.id)),
   ]);

@@ -62,7 +62,8 @@ Usuarios ficticios de demo (uno por rol, desarrolladora `demo`, contraseña `Lyn
 | ana.hernandez@lynna.mx | seller |
 
 Datos ficticios del CRM (12 prospectos en todas las etapas, conversaciones, notas, historial y avisos,
-repartidos entre Miguel y Ana, más uno sin asignar) — ya cargados en **dev** y **stg**:
+repartidos entre Miguel y Ana, más uno sin asignar; horario de citas de Miguel y Ana y 5 citas) — ya cargados
+en **dev** y **stg**:
 `pnpm demo:crm --target local|dev|stg` (idempotente; nunca en prod). Corre antes `pnpm demo:users`.
 
 ## Usuarios y acceso
@@ -121,16 +122,21 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
 
 | Pieza | Qué hace |
 |---|---|
-| `tools.ts` | Lo ÚNICO que la IA puede hacer: buscar lotes disponibles, detalle, planes, simular plan, guardar datos del prospecto, escalar a asesor. Descontar, apartar, confirmar pagos o tocar contratos no existen |
-| `guard.ts` | Valida cada respuesta: montos y lotes solo de herramientas; bloquea descuentos, apartados/pagos confirmados, fechas de escrituración, garantías |
+| `tools.ts` | Lo ÚNICO que la IA puede hacer: buscar lotes disponibles, detalle, planes, simular plan, guardar datos del prospecto, ver horarios, agendar/reagendar y cancelar visitas, escalar a asesor. Descontar, apartar, confirmar pagos o tocar contratos no existen |
+| `guard.ts` | Valida cada respuesta: montos, lotes, horas y fechas de visita solo de herramientas; bloquea descuentos, apartados/pagos confirmados, fechas de escrituración, garantías, y decir que agendó/cambió/canceló una cita sin hacerlo |
 | `intent.ts` | Red de seguridad: las frases de compra del cliente y otros temas se turnan a un asesor aunque el modelo no lo haga |
 | `prompt.ts` | Prompt versionado (`PROMPT_VERSION`) |
 | `runner.ts` | Ciclo modelo ↔ herramientas, un reintento si el validador bloquea, luego mensaje seguro + escalamiento |
 | `respond.ts` | Contexto, bitácora `ai_audit_log` y envío por WhatsApp (o "simulado" sin credenciales de Meta) |
 
 - **Simulador**: en el panel, *Agente de IA*. Mismo código que WhatsApp, sin Meta.
+- **Agenda** (`apps/api/src/crm/agenda.ts`): horario semanal por vendedor (Configuración), citas en *Citas* y en la
+  ficha. La IA ofrece horarios libres reales y agenda con el vendedor del prospecto si tiene horario (si no, con
+  quien esté libre). Un índice único `(vendedor, inicio)` en D1 impide dos citas a la misma hora aunque lleguen
+  simultáneas. El cron avisa al vendedor 2 h antes. Los recordatorios al prospecto por WhatsApp llegan con la Fase 2.
 - **Modelo**: `AI_MODEL` en `wrangler.jsonc` por entorno. Para elegirlo con datos:
   `pnpm --filter @lynna/api eval:agent --url https://devlynna.igniastudio.mx --token <ADMIN_API_TOKEN> --models m1,m2`.
+  13 escenarios (incluye agendar y cancelar visitas; requieren horarios cargados con `demo:crm`).
 - **Pruebas**: Vitest usa un LLM "de guion"; el E2E usa `AI_MODEL=fake` (determinista, solo `ENVIRONMENT=local`, sin red).
 - `pnpm dev` usa Workers AI real (gasta neuronas de la cuenta de Ignia). `wrangler dev` se cae a veces al recargar
   en caliente con la conexión remota de IA: si pasa, reinícialo.

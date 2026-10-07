@@ -1,4 +1,4 @@
-import { Building2, Calculator, CircleDollarSign, LandPlot, MessageCircle, UserPlus, Users, WalletCards } from "lucide-react";
+import { Building2, CalendarCheck, Calculator, CircleDollarSign, LandPlot, MessageCircle, UserPlus, Users, WalletCards } from "lucide-react";
 import { Link } from "react-router";
 import { AvailabilityBar, ErrorAlert, Kpi, Spinner, StatusLegend } from "../components/ui";
 import { useSummary } from "../lib/api";
@@ -9,6 +9,7 @@ const APPS = [
   { to: "/inventario", label: "Inventario", icon: <Building2 size={26} /> },
   { to: "/planes", label: "Planes de pago", icon: <WalletCards size={26} /> },
   { to: "/prospectos", label: "Prospectos", icon: <Users size={26} /> },
+  { to: "/citas", label: "Citas", icon: <CalendarCheck size={26} /> },
 ];
 
 export function Home() {
@@ -49,7 +50,12 @@ export function Home() {
           <div className="grid grid--kpis">
             <Kpi icon={<LandPlot size={14} />} label="Lotes disponibles" value={num(totals.available)} hint={`${num(totals.reserved)} apartados · ${num(totals.sold)} vendidos`} />
             <Kpi icon={<CircleDollarSign size={14} />} label="Inventario disponible" value={moneyShort(totals.value)} hint={money(totals.value)} />
-            <Kpi icon={<Building2 size={14} />} label="Desarrollos" value={num(summary.data.developments.length)} />
+            <Kpi
+              icon={<CalendarCheck size={14} />}
+              label="Citas hoy"
+              value={num(summary.data.appointments?.today ?? 0)}
+              hint={`${num(summary.data.appointments?.next7Days ?? 0)} en los próximos 7 días`}
+            />
             <Kpi
               icon={<UserPlus size={14} />}
               label="Prospectos"

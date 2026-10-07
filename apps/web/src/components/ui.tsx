@@ -1,5 +1,5 @@
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { STATUS_LABEL } from "../lib/format";
 import type { LotStatus } from "../lib/types";
 
@@ -113,6 +113,7 @@ export function Dialog({
   footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -120,8 +121,10 @@ export function Dialog({
     if (!open && el.open) el.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={onClose}>
-      <div className="dialog__header">{title}</div>
+    <dialog ref={ref} className="dialog" onClose={onClose} onCancel={onClose} aria-labelledby={titleId}>
+      <div className="dialog__header" id={titleId}>
+        {title}
+      </div>
       <div className="dialog__body">{children}</div>
       {footer && <div className="dialog__footer">{footer}</div>}
     </dialog>

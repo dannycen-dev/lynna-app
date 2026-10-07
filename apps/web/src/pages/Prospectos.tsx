@@ -1,9 +1,9 @@
-import { Bot, Columns3, List, MessageCircle, UserRoundCheck, Users } from "lucide-react";
+import { Bot, CalendarCheck, Columns3, List, MessageCircle, UserRoundCheck, Users } from "lucide-react";
 import { useMemo, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import { useChangeStage, useProspects, useTeam } from "../lib/api";
-import { dateTime, HANDOFF_LABEL, initials, money, num, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
+import { dateTime, HANDOFF_LABEL, initials, money, num, shortDateTime, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
 import { useSession } from "../lib/session";
 import type { Prospect, ProspectStage } from "../lib/types";
 
@@ -158,6 +158,11 @@ function Board({ prospects }: { prospects: Prospect[] }) {
                         <span className={`badge badge--${t.tone}`}>{t.label}</span>
                       </div>
                       {p.budgetCents && <div className="muted num">Presupuesto {money(p.budgetCents)}</div>}
+                      {p.nextAppointmentAt && (
+                        <div className="row board__appt" style={{ gap: 4, fontSize: 12 }}>
+                          <CalendarCheck size={12} /> Cita {shortDateTime(p.nextAppointmentAt)}
+                        </div>
+                      )}
                       <div className="row" style={{ gap: 4 }}>
                         {p.handoffReason && <span className="badge badge--reserved badge--plain">{HANDOFF_LABEL[p.handoffReason] ?? p.handoffReason}</span>}
                         {p.aiPaused ? (

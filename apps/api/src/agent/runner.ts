@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { developments, prospects } from "../db/schema";
+import { slotLabel, upcomingAppointment } from "../crm/agenda";
+import { developments, prospects, tenants } from "../db/schema";
 import { todayIn } from "../financing";
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
@@ -8,7 +9,7 @@ import { extractAmounts, validateReply } from "./guard";
 import { detectEscalation, isOptOut } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
 import { buildSystemPrompt, FALLBACK_REPLY, MEDIA_REPLY, OPT_OUT_REPLY } from "./prompt";
-import { escalate, newFacts, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
+import { escalate, newFacts, rememberSlot, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
 
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 16;
@@ -89,6 +90,17 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     .where(and(eq(developments.tenantId, input.tenant.id), eq(developments.status, "active")))
     .orderBy(asc(developments.name));
 
+  // Cita vigente: el modelo la conoce para reagendar o recordarla, y su hora cuenta como dato verificado.
+  const [tenantRow, current] = await Promise.all([
+    input.db.select({ timezone: tenants.timezone }).from(tenants).where(eq(tenants.id, input.tenant.id)).get(),
+    upcomingAppointment(input.db, input.prospect.id),
+  ]);
+  const timezone = tenantRow?.timezone ?? "America/Mexico_City";
+  if (current) {
+    rememberSlot(ctx.facts, slotLabel(current.startsAt, timezone));
+    ctx.facts.existing = true;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -99,6 +111,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
         prospectName: input.prospect.name ?? input.prospect.profileName,
         developments: devs,
         handedOff: Boolean(input.prospect.handoffAt),
+        appointment: current ? slotLabel(current.startsAt, timezone) : null,
       }),
     },
     ...input.history.slice(-HISTORY_LIMIT).map(
@@ -162,7 +175,11 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
       messages.push({ role: "assistant", content: draft });
       messages.push({
         role: "user",
-        content: `[Revisión interna, no la menciones] Tu respuesta no se envió porque: ${check.reasons.join("; ")}. Reescríbela usando solo datos de las herramientas; si no tienes el dato, ofrece que un asesor lo confirme.`,
+        content: `[Revisión interna, no la menciones] Tu respuesta no se envió porque: ${check.reasons.join("; ")}. Reescríbela usando solo datos de las herramientas; si no tienes el dato, ofrece que un asesor lo confirme.${
+          check.reasons.some((r) => /cita|agenda/.test(r))
+            ? " Si el prospecto pidió agendar, cambiar o cancelar su visita, llama primero a agendar_visita o cancelar_cita y confirma solo lo que la herramienta responda."
+            : ""
+        }`,
       });
       draft = await converse();
       if (draft) drafts.push(draft);

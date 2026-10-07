@@ -4,6 +4,10 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  AgendaItem,
+  Availability,
+  AvailabilityRule,
+  Slot,
   Development,
   ImportResult,
   Lot,
@@ -301,5 +305,57 @@ export function useUpdateTeamMember() {
     mutationFn: ({ id, receivesLeads }: { id: string; receivesLeads: boolean }) =>
       call(`/team/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ receivesLeads }) }),
     onSuccess: () => invalidate("team"),
+  });
+}
+
+// ── Agenda de citas ────────────────────────────────────────────────────────────
+
+export const useAgenda = (from: string, days: number, userId: string | null) =>
+  useApiQuery<AgendaItem[]>(["agenda", from, days, userId], `/appointments?${new URLSearchParams({ from, days: String(days), ...(userId ? { userId } : {}) })}`);
+
+export const useSlots = (date: string | null, prospectId: string | undefined, userId?: string | null) =>
+  useApiQuery<Slot[]>(
+    ["slots", date, prospectId, userId],
+    date ? `/appointments/slots?${new URLSearchParams({ date, ...(prospectId ? { prospectId } : {}), ...(userId ? { userId } : {}) })}` : null,
+  );
+
+export const useAvailability = () => useApiQuery<Availability>(["availability"], "/availability");
+
+export function useBookAppointment() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: { prospectId: string; startsAt: number; userId?: string; notes?: string }) =>
+      call("/appointments", { method: "POST", body: JSON.stringify(data) }),
+    onSettled: () => invalidate("agenda", "slots", "prospect", "prospects", "summary"),
+  });
+}
+
+export function useSetAppointmentStatus() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; status: "completed" | "no_show" | "cancelled"; reason?: string }) =>
+      call(`/appointments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("agenda", "slots", "prospect", "prospects", "summary"),
+  });
+}
+
+export function useSaveAvailability() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ userId, rules }: { userId: string; rules: AvailabilityRule[] }) =>
+      call(`/availability/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify({ rules }) }),
+    onSuccess: () => invalidate("availability", "slots"),
+  });
+}
+
+export function useSaveAppointmentSettings() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: { appointmentMinutes: number }) => call("/settings/appointments", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("availability", "slots"),
   });
 }

@@ -32,6 +32,9 @@ export const tenants = sqliteTable("tenants", {
   assignmentMode: text("assignment_mode", { enum: ["round_robin", "manual"] }).notNull().default("round_robin"),
   // Si un prospecto pidió asesor y nadie tomó la conversación en estos minutos, pasa al siguiente vendedor (0 = nunca).
   reassignAfterMinutes: integer("reassign_after_minutes").notNull().default(30),
+  // Agenda: zona horaria del negocio (horarios de los vendedores) y duración de cada cita.
+  timezone: text("timezone").notNull().default("America/Mexico_City"),
+  appointmentMinutes: integer("appointment_minutes").notNull().default(60),
   createdAt: createdAt(),
 });
 
@@ -376,7 +379,7 @@ export const notifications = sqliteTable(
     tenantId: tenantId(),
     userId: text("user_id").references(() => users.id),
     prospectId: text("prospect_id").references(() => prospects.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["handoff", "assignment", "system"] }).notNull(),
+    kind: text("kind", { enum: ["handoff", "assignment", "appointment", "system"] }).notNull(),
     title: text("title").notNull(),
     body: text("body"),
     createdAt: createdAt(),
@@ -397,4 +400,56 @@ export const notificationReads = sqliteTable(
     readAt: integer("read_at").notNull(),
   },
   (t) => [uniqueIndex("notification_reads_uq").on(t.notificationId, t.userId)],
+);
+
+// ── Agenda de citas ───────────────────────────────────────────────────────────
+
+// Horario semanal en que un vendedor recibe visitas (hora local de la desarrolladora).
+export const availabilityRules = sqliteTable(
+  "availability_rules",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weekday: integer("weekday").notNull(), // 0 = domingo … 6 = sábado
+    startMinute: integer("start_minute").notNull(), // minutos desde la medianoche
+    endMinute: integer("end_minute").notNull(),
+  },
+  (t) => [index("availability_user_idx").on(t.userId, t.weekday)],
+);
+
+export const APPOINTMENT_STATUSES = ["scheduled", "completed", "no_show", "cancelled"] as const;
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
+
+export const appointments = sqliteTable(
+  "appointments",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    prospectId: text("prospect_id")
+      .notNull()
+      .references(() => prospects.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    developmentId: text("development_id").references(() => developments.id),
+    startsAt: integer("starts_at").notNull(),
+    endsAt: integer("ends_at").notNull(),
+    status: text("status", { enum: APPOINTMENT_STATUSES }).notNull().default("scheduled"),
+    source: text("source", { enum: ["ai", "user"] }).notNull(),
+    notes: text("notes"),
+    cancelReason: text("cancel_reason"),
+    // Aviso interno al vendedor antes de la cita (cron). Los recordatorios al prospecto van por WhatsApp (Fase 2).
+    sellerRemindedAt: integer("seller_reminded_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // Un vendedor no puede tener dos citas vigentes a la misma hora: lo garantiza la base, no solo el código.
+    uniqueIndex("appointments_user_start_uq").on(t.userId, t.startsAt).where(sql`status = 'scheduled'`),
+    index("appointments_tenant_start_idx").on(t.tenantId, t.startsAt),
+    index("appointments_prospect_idx").on(t.prospectId),
+  ],
 );

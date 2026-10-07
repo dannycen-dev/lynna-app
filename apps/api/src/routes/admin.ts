@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import { importLots, parseLotsCsv } from "../catalog/lots-import";
 import { CatalogError, changeLotStatus, getDevelopmentBySlug, plansForDevelopment, simulateForLot } from "../catalog/service";
 import { getDb } from "../db/client";
 import {
+  appointments,
   CALCULATION_TYPES,
   conversations,
   developments,
@@ -21,11 +22,14 @@ import {
   VALUE_TYPES,
 } from "../db/schema";
 import { PlanError, todayIn, validatePlan } from "../financing";
+import { addDays } from "../financing/dates";
+import { localToEpoch } from "../crm/agenda";
 import { actorOf, authenticate, canAccessTenant, canWrite, type AuthVariables } from "../auth/middleware";
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
 import { prospectScope } from "../crm/assignment";
+import { agenda } from "./agenda";
 import { crm } from "./crm";
 import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
@@ -61,7 +65,7 @@ admin.use("/tenants/:tenant/*", async (c, next) => {
   // conversaciones, avisos). No modifican inventario, planes ni importaciones.
   const path = c.req.path;
   const sellerAllowed =
-    path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications)\//.test(path);
+    path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications|appointments|availability)(\/|$)/.test(path);
   if (c.req.method !== "GET" && !sellerAllowed && !canWrite(c.var.principal)) {
     return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
   }
@@ -90,7 +94,13 @@ admin.get("/tenants/:tenant/summary", async (c) => {
   const db = getDb(c.env.DB);
   const tenantId = c.var.tenant.id;
   const since = Date.now() - 24 * 60 * 60 * 1000;
-  const [byDevelopment, prospectTotals] = await Promise.all([
+  const tz = c.var.tenant.timezone;
+  const today = todayIn(tz);
+  const dayStart = localToEpoch(today, 0, tz);
+  const dayEnd = localToEpoch(addDays(today, 1), 0, tz);
+  const weekEnd = localToEpoch(addDays(today, 7), 0, tz);
+  const sellerOnly = c.var.principal.kind === "user" && c.var.principal.user.role === "seller" ? c.var.principal.user.id : null;
+  const [byDevelopment, prospectTotals, appointmentTotals] = await Promise.all([
     db
       .select({
         developmentId: developments.id,
@@ -119,8 +129,24 @@ admin.get("/tenants/:tenant/summary", async (c) => {
       .from(prospects)
       .where(and(eq(prospects.tenantId, tenantId), prospectScope(c.var.principal)))
       .get(),
+    db
+      .select({
+        today: sql<number>`coalesce(sum(${appointments.startsAt} >= ${dayStart} AND ${appointments.startsAt} < ${dayEnd}), 0)`,
+        next7Days: sql<number>`count(*)`,
+      })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.tenantId, tenantId),
+          eq(appointments.status, "scheduled"),
+          gte(appointments.startsAt, dayStart),
+          lt(appointments.startsAt, weekEnd),
+          sellerOnly ? eq(appointments.userId, sellerOnly) : undefined,
+        ),
+      )
+      .get(),
   ]);
-  return c.json({ tenant: c.var.tenant, developments: byDevelopment, prospects: prospectTotals });
+  return c.json({ tenant: c.var.tenant, developments: byDevelopment, prospects: prospectTotals, appointments: appointmentTotals });
 });
 
 // ── Desarrollos ────────────────────────────────────────────────────────────────
@@ -352,6 +378,7 @@ admin.get("/tenants/:tenant/prospects", async (c) => {
       updatedAt: prospects.updatedAt,
       lastInboundAt: conversations.lastInboundAt,
       messageCount: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messages.conversationId} = ${conversations.id})`,
+      nextAppointmentAt: sql<number | null>`(SELECT min(${appointments.startsAt}) FROM ${appointments} WHERE ${appointments.prospectId} = ${prospects.id} AND ${appointments.status} = 'scheduled' AND ${appointments.endsAt} >= ${Date.now()})`,
     })
     .from(prospects)
     .leftJoin(conversations, eq(conversations.prospectId, prospects.id))
@@ -375,6 +402,7 @@ admin.get("/tenants/:tenant/conversations/:conversationId/messages", async (c) =
 // ── CRM ─────────────────────────────────────────────────────────────────────────
 
 admin.route("/tenants/:tenant", crm);
+admin.route("/tenants/:tenant", agenda);
 
 // ── Agente de IA: simulador de WhatsApp ──────────────────────────────────────────
 

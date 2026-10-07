@@ -43,6 +43,13 @@
       "when": 1791326504932,
       "tag": "0005_assignment",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791341342951,
+      "tag": "0006_appointments",
+      "breakpoints": true
     }
   ]
 }

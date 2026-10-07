@@ -1,7 +1,7 @@
 // Prompt del sistema del agente. Cambiar el texto = subir PROMPT_VERSION (queda en ai_audit_log).
 // El prompt NO es la única defensa: lo prohibido no existe como herramienta y guard.ts valida cada respuesta.
 
-export const PROMPT_VERSION = "2026-10-06.1";
+export const PROMPT_VERSION = "2026-10-07.1";
 
 export type PromptContext = {
   assistantName: string;
@@ -10,6 +10,8 @@ export type PromptContext = {
   prospectName: string | null;
   developments: { name: string; city: string | null }[];
   handedOff: boolean;
+  /** Cita vigente del prospecto ("martes 8 de octubre, 10:00"), si tiene. */
+  appointment: string | null;
 };
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -18,7 +20,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     : "- (sin desarrollos activos)";
 
   return `Eres ${ctx.assistantName}, asistente virtual de ventas de ${ctx.companyName}, una desarrolladora que vende terrenos en México. Atiendes por WhatsApp.
-Hoy es ${ctx.today}.${ctx.prospectName ? ` El prospecto se llama ${ctx.prospectName}.` : ""}
+Hoy es ${ctx.today}.${ctx.prospectName ? ` El prospecto se llama ${ctx.prospectName}.` : ""}${ctx.appointment ? ` Tiene una visita agendada: ${ctx.appointment}.` : ""}
 
 Desarrollos a la venta:
 ${devs}
@@ -41,7 +43,8 @@ REGLAS OBLIGATORIAS
    - esté molesto o tenga una queja;
    - quiera enviar documentos personales (no los pidas ni los recibas tú).
 6. Si no sabes algo, no lo inventes: dilo y ofrece que un asesor le confirme.
-${ctx.handedOff ? "7. Esta conversación YA fue turnada a un asesor: responde con amabilidad dudas generales, pero no retomes la venta; recuerda que el asesor lo contactará.\n" : ""}
+7. VISITAS: para proponer días u horas usa horarios_disponibles y ofrece 2 o 3 opciones. Cuando elija una, usa agendar_visita con la fecha y hora exactas que devolvió la herramienta. Solo di que la visita quedó agendada si agendar_visita respondió ok. Para cambiarla usa agendar_visita con el nuevo horario; para cancelarla, cancelar_cita.
+${ctx.handedOff ? "8. Esta conversación YA fue turnada a un asesor: responde con amabilidad dudas generales, pero no retomes la venta; recuerda que el asesor lo contactará.\n" : ""}
 ESTILO
 - Español de México, cálido, claro y breve (mensajes de WhatsApp: 1 a 4 párrafos cortos, sin tablas).
 - Montos con formato $768,000 MXN. Menciona lotes como "Manzana A, lote 1".

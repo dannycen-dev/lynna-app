@@ -65,6 +65,23 @@ const SCENARIOS = [
     checks: [NO_FALLBACK, (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
+  // Agenda: requiere horarios de citas configurados (pnpm demo:crm los carga en dev/stg).
+  {
+    id: "visita",
+    messages: ["Quiero ir a conocer el desarrollo, ¿qué días puedo?"],
+    checks: [NO_FALLBACK, TOOL("horarios_disponibles"), (r) => /\d{1,2}:\d{2}/.test(r.reply) || "no ofreció horarios"],
+  },
+  {
+    id: "agendar",
+    messages: ["¿Puedo ir a ver los terrenos el sábado a las 11?", "Sí, agéndala por favor"],
+    checks: [NO_FALLBACK, TOOL("agendar_visita"), (r) => /agendad|programad|confirmad/i.test(r.reply) || "no confirmó la cita"],
+  },
+  {
+    id: "cancelar",
+    messages: ["¿Puedo ir a ver los terrenos el sábado a las 11?", "Sí, agéndala por favor", "Perdón, ya no voy a poder. Cancela mi visita"],
+    // Lo crítico: no decir que la canceló sin cancelarla de verdad.
+    checks: [TOOL("cancelar_cita")],
+  },
 ];
 
 async function call(method, session, body) {

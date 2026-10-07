@@ -1,19 +1,29 @@
-import { Shuffle, Users } from "lucide-react";
+import { CalendarClock, Shuffle, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useAssignmentSettings, useTeam, useUpdateAssignmentSettings, useUpdateTeamMember } from "../lib/api";
-import { ROLE_LABEL, timeAgo } from "../lib/format";
+import {
+  useAssignmentSettings,
+  useAvailability,
+  useSaveAppointmentSettings,
+  useSaveAvailability,
+  useTeam,
+  useUpdateAssignmentSettings,
+  useUpdateTeamMember,
+} from "../lib/api";
+import { minutesToTime, ROLE_LABEL, timeAgo, timeToMinutes, WEEKDAY_LABEL } from "../lib/format";
+import type { AvailabilityRule } from "../lib/types";
 import { useSession } from "../lib/session";
 
 export function Configuracion() {
   const { canWrite } = useSession();
   return (
     <div className="page" style={{ maxWidth: 960 }}>
-      <PageHeader title="Configuración" subtitle="Cómo se reparten los prospectos entre tu equipo de ventas." />
-      {!canWrite && <div className="alert alert--info" style={{ marginBottom: 16 }}>Solo un gerente o dueño puede cambiar esta configuración.</div>}
+      <PageHeader title="Configuración" subtitle="Cómo se reparten los prospectos y cuándo recibe visitas tu equipo." />
+      {!canWrite && <div className="alert alert--info" style={{ marginBottom: 16 }}>Solo un gerente o dueño puede cambiar el reparto. Tu horario de citas sí lo puedes ajustar.</div>}
       <div className="stack">
         <AssignmentCard disabled={!canWrite} />
         <TeamCard disabled={!canWrite} />
+        <AvailabilityCard canWrite={canWrite} />
       </div>
     </div>
   );
@@ -143,5 +153,104 @@ function TeamCard({ disabled }: { disabled: boolean }) {
         <ErrorAlert error={update.error ?? team.error} />
       </div>
     </div>
+  );
+}
+
+// Lunes primero, como se lee una semana de trabajo.
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+type DayDraft = { on: boolean; start: string; end: string };
+
+function toDraft(rules: AvailabilityRule[]): Record<number, DayDraft> {
+  const draft: Record<number, DayDraft> = {};
+  for (const d of WEEK_ORDER) {
+    const r = rules.find((x) => x.weekday === d);
+    draft[d] = r ? { on: true, start: minutesToTime(r.startMinute), end: minutesToTime(r.endMinute) } : { on: false, start: "09:00", end: "18:00" };
+  }
+  return draft;
+}
+
+function AvailabilityCard({ canWrite }: { canWrite: boolean }) {
+  const availability = useAvailability();
+  const saveSettings = useSaveAppointmentSettings();
+  if (availability.isPending) return <Spinner />;
+  const data = availability.data;
+  return (
+    <div className="card">
+      <div className="card__header">
+        <CalendarClock size={16} /> Horarios de citas
+      </div>
+      <div className="card__body stack">
+        <p className="muted" style={{ margin: 0 }}>
+          La IA solo ofrece visitas en estos horarios y nunca empalma dos citas del mismo vendedor. Si el prospecto ya tiene vendedor con horario, se agenda con él; si no, con quien esté libre.
+        </p>
+        {data && (
+          <div className="field" style={{ width: 260 }}>
+            <label htmlFor="appt-minutes">Duración de cada cita</label>
+            <select
+              id="appt-minutes"
+              className="select"
+              value={data.appointmentMinutes}
+              disabled={!canWrite || saveSettings.isPending}
+              onChange={(e) => saveSettings.mutate({ appointmentMinutes: Number(e.target.value) })}
+            >
+              {[30, 45, 60, 90, 120].map((m) => (
+                <option key={m} value={m}>
+                  {m < 60 ? `${m} minutos` : m === 60 ? "1 hora" : `${m / 60} horas`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <ErrorAlert error={saveSettings.error ?? availability.error} />
+        {data?.members.map((m) => <MemberSchedule key={m.id} member={m} />)}
+        {data?.members.length === 0 && <p className="muted">No hay vendedores activos.</p>}
+      </div>
+    </div>
+  );
+}
+
+function MemberSchedule({ member }: { member: { id: string; name: string; role: string; rules: AvailabilityRule[] } }) {
+  const save = useSaveAvailability();
+  const [draft, setDraft] = useState(() => toDraft(member.rules));
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setDraft(toDraft(member.rules)), [member.rules]);
+  const set = (d: number, patch: Partial<DayDraft>) => {
+    setSaved(false);
+    setDraft((prev) => ({ ...prev, [d]: { ...prev[d]!, ...patch } }));
+  };
+  const invalid = WEEK_ORDER.some((d) => draft[d]!.on && timeToMinutes(draft[d]!.end) <= timeToMinutes(draft[d]!.start));
+  const submit = () => {
+    const rules = WEEK_ORDER.filter((d) => draft[d]!.on).map((d) => ({ weekday: d, startMinute: timeToMinutes(draft[d]!.start), endMinute: timeToMinutes(draft[d]!.end) }));
+    save.mutate({ userId: member.id, rules }, { onSuccess: () => setSaved(true) });
+  };
+  return (
+    <section className="note" aria-label={`Horario de ${member.name}`}>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <strong>
+          {member.name} <span className="muted" style={{ fontWeight: 400 }}>· {ROLE_LABEL[member.role] ?? member.role}</span>
+        </strong>
+        <span className="row" style={{ gap: 8 }}>
+          {saved && <span className="muted">Guardado</span>}
+          <button className="btn btn--sm btn--primary" disabled={save.isPending || invalid} onClick={submit}>
+            Guardar horario
+          </button>
+        </span>
+      </div>
+      <div className="availability-grid">
+        {WEEK_ORDER.map((d) => (
+          <div key={d} style={{ display: "contents" }}>
+            <label className="row" style={{ gap: 6 }}>
+              <input type="checkbox" checked={draft[d]!.on} onChange={(e) => set(d, { on: e.target.checked })} aria-label={`${member.name} atiende el ${WEEKDAY_LABEL[d]}`} />
+              {WEEKDAY_LABEL[d]}
+            </label>
+            <input className="input" type="time" step={900} value={draft[d]!.start} disabled={!draft[d]!.on} onChange={(e) => set(d, { start: e.target.value })} aria-label={`${WEEKDAY_LABEL[d]}, desde`} />
+            <input className="input" type="time" step={900} value={draft[d]!.end} disabled={!draft[d]!.on} onChange={(e) => set(d, { end: e.target.value })} aria-label={`${WEEKDAY_LABEL[d]}, hasta`} />
+          </div>
+        ))}
+      </div>
+      {invalid && <div className="alert alert--error" style={{ marginTop: 8 }}>La hora de fin debe ser mayor que la de inicio.</div>}
+      <ErrorAlert error={save.error} />
+    </section>
   );
 }

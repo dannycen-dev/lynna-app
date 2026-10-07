@@ -4,7 +4,8 @@
 //
 //   pnpm --filter @lynna/api demo:crm --target dev      (local | dev | stg — nunca prod)
 //
-// Idempotente: borra y recrea solo lo suyo (ids "demo-p-*", "demo-c-*").
+// Idempotente: borra y recrea solo lo suyo (ids "demo-p-*", "demo-c-*", "demo-ap-*" y el horario de citas
+// de los vendedores de demo).
 // Requiere el seed de inventario (tenant "tnt-demo", número "wa-demo") y, para asignar, los usuarios de demo.
 
 import { spawnSync } from "node:child_process";
@@ -49,13 +50,17 @@ const P = [
     ],
   },
   {
-    n: 3, name: "Fernanda Ruiz", stage: "qualified", score: 75, seller: MIGUEL, ago: 2 * H,
+    n: 3, name: "Fernanda Ruiz", stage: "appointment", score: 75, seller: MIGUEL, ago: 2 * H,
     budget: 900_000, downPayment: 200_000, purpose: "inversion", timeframe: "inmediato", email: "fernanda.ruiz@example.com",
     msgs: [
       ["in", "prospect", "Hola, quiero invertir. Tengo 200 mil de enganche y presupuesto de 900 mil", 130],
       ["out", "ai", "¡Excelente, Fernanda! Para inversión te recomiendo la Manzana D, frente a parque. ¿Te comparto la simulación a 36 meses?", 129],
       ["in", "prospect", "Sí por favor", 125],
       ["out", "ai", "Con gusto. Es una cotización informativa, sujeta a confirmación por un asesor. Un asesor te puede compartir los detalles por llamada si lo prefieres.", 124],
+      ["in", "prospect", "¿Puedo ir a verlo mañana en la mañana?", 122],
+      ["out", "ai", "¡Claro! Tengo libre mañana a las 10:00 o a las 11:00. ¿Cuál te acomoda?", 121],
+      ["in", "prospect", "A las 10", 120],
+      ["out", "ai", "¡Listo! Tu visita quedó agendada para mañana a las 10:00. Un asesor te recibirá en el desarrollo.", 119],
     ],
   },
   {
@@ -136,6 +141,8 @@ const P = [
 
 const sql = [];
 sql.push(
+  "DELETE FROM appointments WHERE prospect_id LIKE 'demo-p-%'",
+  `DELETE FROM availability_rules WHERE user_id IN (${user(MIGUEL)}, ${user(ANA)})`,
   "DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE prospect_id LIKE 'demo-p-%')",
   "DELETE FROM notifications WHERE prospect_id LIKE 'demo-p-%'",
   "DELETE FROM prospect_notes WHERE prospect_id LIKE 'demo-p-%'",
@@ -197,6 +204,42 @@ for (const p of P) {
   }
 }
 
+// ── Agenda: horario de los vendedores y citas ───────────────────────────────────
+// Hora del centro de México (UTC-6 todo el año desde 2022).
+const todayMx = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date(NOW));
+const atMx = (dayOffset, hour, minute = 0) => {
+  const [y, m, d] = todayMx.split("-").map(Number);
+  return Date.UTC(y, m - 1, d + dayOffset, hour + 6, minute);
+};
+// [vendedor, días (0 = domingo), desde, hasta] en minutos
+const SCHEDULES = [
+  [MIGUEL, [1, 2, 3, 4, 5], 9 * 60, 18 * 60],
+  [MIGUEL, [6], 9 * 60, 14 * 60],
+  [ANA, [2, 3, 4, 5, 6], 10 * 60, 19 * 60],
+  [ANA, [0], 10 * 60, 14 * 60],
+];
+for (const [email, days, start, end] of SCHEDULES) {
+  for (const day of days) {
+    sql.push(`INSERT INTO availability_rules (id, tenant_id, user_id, weekday, start_minute, end_minute)
+      VALUES (${q(`demo-av-${email.split("@")[0]}-${day}-${start}`)}, 'tnt-demo', ${user(email)}, ${day}, ${start}, ${end})`);
+  }
+}
+// [prospecto, vendedor, día relativo, hora, estado, origen]
+const APPOINTMENTS = [
+  [3, MIGUEL, 1, 10, "scheduled", "ai"],
+  [4, ANA, 1, 11, "scheduled", "user"],
+  [7, ANA, 3, 17, "scheduled", "ai"],
+  [5, MIGUEL, -2, 12, "completed", "ai"],
+  [6, MIGUEL, -4, 16, "completed", "user"],
+];
+for (const [n, email, day, hour, status, source] of APPOINTMENTS) {
+  const pid = `demo-p-${String(n).padStart(2, "0")}`;
+  const start = atMx(day, hour);
+  sql.push(`INSERT INTO appointments (id, tenant_id, prospect_id, user_id, development_id, starts_at, ends_at, status, source, created_at, updated_at)
+    VALUES (${q(`demo-ap-${n}`)}, 'tnt-demo', ${q(pid)}, ${user(email)}, (SELECT id FROM developments WHERE tenant_id = 'tnt-demo' ORDER BY name LIMIT 1),
+    ${start}, ${start + H}, ${q(status)}, ${q(source)}, ${NOW - 2 * 24 * H}, ${NOW - 2 * 24 * H})`);
+}
+
 // Turno del reparto coherente con los datos (el siguiente en recibir será quien menos tiene recientes).
 sql.push(`UPDATE users SET last_assigned_at = ${NOW - 30 * MIN} WHERE email = ${q(MIGUEL)}`);
 sql.push(`UPDATE users SET last_assigned_at = ${NOW - 45 * MIN} WHERE email = ${q(ANA)}`);
@@ -220,4 +263,4 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
-console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial y avisos.`);
+console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial, avisos, horarios y citas.`);

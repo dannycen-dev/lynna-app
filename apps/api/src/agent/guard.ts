@@ -69,11 +69,68 @@ export function extractLots(text: string): { key: string | null; number: string 
   return found;
 }
 
+// Afirmaciones sobre la agenda. Cada una exige que la herramienta correspondiente haya respondido ok en
+// este turno; así la IA no puede decir que agendó, cambió o canceló algo que no hizo.
+/** "Tu visita quedó agendada": vale si se agendó en este turno o si ya tenía una cita (para recordarla). */
+const BOOKING_CLAIM =
+  /\b(cita|visita) (ya )?(quedo|queda|esta|ha quedado) (agendada|confirmada|programada|registrada|apartada|lista)\b|\b(agende|agendamos|programe|programamos|reserve|reservamos|confirme|confirmamos) (tu|la|su) (cita|visita)\b|\bte (agende|espero|esperamos) (el|este|ese|la|las|a las)\b/;
+// Cancelar o cambiar: el modelo lo dice de muchas formas ("he procedido a cancelar tu visita", "ya quedó
+// cancelada", "la moví al sábado"), así que se revisa cada ORACIÓN AFIRMATIVA que hable de la cita y use
+// un verbo de cancelar/cambiar. Las preguntas ("¿quieres que la cancele?") no cuentan.
+// Pasado o participio ("cancelé", "he cancelado", "quedó cancelada", "procedí a cancelar"); el infinitivo
+// ("si necesitas cancelar") es un ofrecimiento, no una afirmación.
+const CANCEL_VERB = /\b(cancele|cancelamos|cancelado|cancelada)\b|\b(procedi|procedido|procedimos) a cancelar/;
+const CHANGE_VERB =
+  /\b(cambie|cambiamos|cambiada|cambiado|movi|movimos|movida|movido|reagende|reagendamos|reagendada|reagendado|reprograme|reprogramamos|reprogramada|reprogramado)\b|\b(procedi|procedido|procedimos) a (cambiar|mover|reagendar|reprogramar)/;
+const APPOINTMENT_WORD = /\b(cita|visita|la|lo)\b/;
+
+/** Oraciones afirmativas (sin las preguntas). */
+function statements(t: string): string[] {
+  return t
+    .split(/(?<=[.!?\n])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s && !s.startsWith("¿") && !s.endsWith("?"));
+}
+const MONTHS = "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre";
+
+/** "10:00", "4:30 pm" → "10:00", "16:30". */
+export function extractTimes(text: string): string[] {
+  const out: string[] = [];
+  for (const m of strip(text).matchAll(/\b(\d{1,2}):(\d{2})\s*(a\.?\s?m\.?|p\.?\s?m\.?|hrs?\.?|horas)?/g)) {
+    let h = Number(m[1]);
+    const suffix = (m[3] ?? "").replace(/[\s.]/g, "");
+    if (suffix.startsWith("pm") && h < 12) h += 12;
+    if (suffix.startsWith("am") && h === 12) h = 0;
+    if (h < 24 && Number(m[2]) < 60) out.push(`${String(h).padStart(2, "0")}:${m[2]}`);
+  }
+  return out;
+}
+
 export function validateReply(text: string, facts: Facts): GuardResult {
   const reasons: string[] = [];
   const t = strip(text);
 
   for (const rule of FORBIDDEN) if (rule.pattern.test(t)) reasons.push(rule.reason);
+
+  if (BOOKING_CLAIM.test(t) && !facts.booked && !facts.existing) reasons.push("confirma una cita que no se agendó con agendar_visita");
+  // Solo aplica si hay o hubo cita de por medio (una cita vigente o una herramienta de agenda en el turno).
+  const agendaContext = facts.existing || facts.booked || facts.cancelled || /\b(cita|visita)\b/.test(t);
+  if (agendaContext) {
+    for (const s of statements(t)) {
+      if (!APPOINTMENT_WORD.test(s)) continue;
+      if (CANCEL_VERB.test(s) && !facts.cancelled && !/\bno (se )?(ha |han )?(cancel|pued)/.test(s)) reasons.push("dice que canceló la cita sin usar cancelar_cita");
+      if (CHANGE_VERB.test(s) && /\b(cita|visita)\b/.test(s) && !facts.booked) reasons.push("dice que cambió la cita sin usar agendar_visita");
+    }
+  }
+  for (const time of extractTimes(text)) {
+    if (!facts.times.has(time)) reasons.push(`menciona el horario ${time} que no viene de la agenda`);
+  }
+  // Fechas de visitas: si habla de cita o visita, el día ("9 de octubre") debe venir de la agenda.
+  if (/\b(cita|visita|agend)/.test(t)) {
+    for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2}) de (${MONTHS})\\b`, "g"))) {
+      if (!facts.dates.has(`${m[1]} de ${m[2]}`)) reasons.push(`menciona el ${m[1]} de ${m[2]} que no viene de la agenda`);
+    }
+  }
 
   for (const amount of extractAmounts(text)) {
     if (amount >= MIN_CHECKED_AMOUNT && !amountVerified(amount, facts)) {

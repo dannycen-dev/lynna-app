@@ -1552,3 +1552,24 @@ textarea {
 .switch input:checked::after {
   transform: translateX(16px);
 }
+
+/* ── Agenda ─────────────────────────────────────────────────────────────────── */
+.slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.availability-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(2, minmax(0, 150px));
+  gap: 6px 10px;
+  align-items: center;
+}
+.availability-grid .input {
+  height: 32px;
+}
+@media (max-width: 640px) {
+  .availability-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}

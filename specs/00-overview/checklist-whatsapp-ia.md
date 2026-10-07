@@ -98,10 +98,13 @@
 - **Acepta:** ningún prospecto con opt-out recibe mensajes.
 
 ### 2.8 Agenda de citas y visitas
-- [ ] Tabla `availability_slots` por desarrollo/vendedor; `appointments` con `UNIQUE(vendedor, inicio)` para evitar doble reserva.
-- [ ] Tools `horarios_disponibles(desarrollo, fecha)` y `agendar_visita(slot_id)`.
-- [ ] Confirmación y recordatorio (24 h y 2 h antes) con plantilla utility.
-- [ ] Reagendar/cancelar desde WhatsApp.
+- [x] Horario semanal por vendedor (`availability_rules`); `appointments` con índice único `(vendedor, inicio)` para citas vigentes: dos reservas simultáneas → la base rechaza la segunda. — _2026-10-07; probado con reservas concurrentes_
+- [x] Tools `horarios_disponibles(fecha?)`, `agendar_visita(fecha, hora)` y `cancelar_cita`. — _agenda con el vendedor del prospecto si tiene horario; si no, con quien esté libre_
+- [x] Validador: horas y fechas de visita solo de la agenda; no puede decir que agendó, cambió o canceló sin la herramienta. — _caso real visto con Gemma ("He cancelado tu visita" sin cancelar) ahora se bloquea y el reintento llama a la herramienta_
+- [x] Panel: página **Citas** (semana, por vendedor; asistió / no asistió / cancelar), citas en la ficha (agendar/reagendar), horario editable en Configuración, próxima cita en el tablero y KPI "Citas hoy". — _"Asistió" mueve el prospecto a "Visitó"_
+- [x] Aviso interno al vendedor 2 h antes de la cita (cron). — _los recordatorios al prospecto van con WhatsApp_
+- [ ] Confirmación y recordatorio al prospecto (24 h y 2 h antes) con plantilla utility. — _depende de WhatsApp (Fase 2)_
+- [x] Reagendar/cancelar desde la conversación (la IA usa agendar_visita / cancelar_cita). — _probado en el simulador con el modelo real; por WhatsApp real en Fase 2_
 - [ ] Opcional: sincronización con Google Calendar del vendedor.
 
 ### 2.9 Asignación de prospectos a vendedores
@@ -263,7 +266,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 
 - [ ] **Costo de implementación**: fases 0–6 + carga de inventario + configuración + capacitación.
 - [ ] **Mensualidad**: hosting Cloudflare + soporte + IA incluida hasta cierto volumen.
-- [ ] **Costos variables a transparentar**: tarifas de Meta por mensajes de plantilla (marketing/utility; las respuestas dentro de la ventana de 24 h son de servicio) — **verificar tarifas vigentes para México**; consumo de IA por conversación (medirlo en la demo).
+- [x] **Costos variables a transparentar**: tarifas oficiales de Meta para México desde el 1-oct-2026: marketing $0.7298 MXN, utilidad y servicio $0.1565 MXN, **las respuestas (servicio) se cobran después de 1,000 al mes por número**; Meta Business Agent (IA de Meta) a USD 2/M tokens ≈ $0.73–0.91 MXN por respuesta, ~5× el agente de Lynna con Workers AI. Consumo de IA medido (~20 neuronas por respuesta). La cuenta de Meta del cliente necesita método de pago o se cortan las respuestas después de las 1,000 gratis. Detalle en `propuestas/Lynna-costos-y-precios-2026-10.docx` (interno, fuera del repo).
 - [ ] **Tiempo estimado**: por definir tras estimar fases.
 - [ ] **Incluye**: configuración de WABA, carga de inventario, capacitación a vendedores, demo previa.
 
@@ -281,7 +284,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] Datos de demo: `pnpm demo:users` (un usuario por rol) y `pnpm demo:crm` (12 prospectos) en dev y stg.
 
 ### Pendientes sin WhatsApp (orden propuesto)
-- [ ] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel.
+- [x] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel. — _2026-10-07, dev; eval del agente 13/13 (incluye agendar y cancelar)_
 - [ ] **Base de conocimiento** (§2.2): FAQ, requisitos para escriturar, formas de pago — textos aprobados por el cliente (Vectorize).
 - [ ] **Configuración por desarrolladora**: nombre del asistente, horario de atención, texto del aviso de privacidad, formas de pago.
 - [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
@@ -289,6 +292,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] **Apartado vencido**: avisar al vendedor cuando el cron libera un lote (§2.11).
 - [ ] **Seguimientos automáticos** (§2.7): secuencias con Workflows; el envío real depende de WhatsApp.
 - [ ] Avisos en tiempo real (Durable Object + WebSocket) en lugar de consulta cada 10 s.
+- [ ] Agenda, mejoras: varios horarios por día por vendedor, días festivos/bloqueos (vacaciones), sincronizar con Google Calendar.
 
 ### Al final: WhatsApp real (Fase 2)
 - [ ] Credenciales de Meta (app secret, access token, phone_number_id) en dev/stg/prod.
@@ -301,4 +305,11 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] **Workers Paid** (USD 5/mes) antes de producción: más neuronas y modelos.
 - [ ] Primer release **v0.1.0** a producción (con aprobación).
 - [ ] Del cliente: inventario real (CSV), planes de pago, FAQ y textos legales, número de WhatsApp.
-- [ ] Propuesta comercial (§10): costos de implementación, mensualidad, costos variables de Meta y neuronas.
+- [ ] Propuesta comercial (§10) para el cliente. Hecho: análisis interno de costos, competencia (Adara, Manivela MV-Gaia, Leadsales, Kosmo, Aurora) y precios sugeridos en `propuestas/Lynna-costos-y-precios-2026-10.docx` (6-oct-2026). Falta: versión para el cliente.
+- [ ] **Privacidad (LFPDPPP, DOF 20-03-2025)** — detalle en `propuestas/Lynna-costos-y-precios-2026-10.docx`:
+  - [ ] Aviso de privacidad de la desarrolladora (menciona a Ignia, Cloudflare, Meta y el proveedor de IA), enlazado desde el primer mensaje de WhatsApp.
+  - [ ] Consentimiento expreso en WhatsApp **antes** de preguntar presupuesto, enganche o forma de pago (datos patrimoniales, art. 7).
+  - [ ] Contrato de encargo desarrolladora ↔ Ignia (datos, finalidad, plazo, borrado).
+  - [ ] ARCO desde el panel: exportar y borrar los datos de un prospecto (ya existe la baja / opt-out).
+  - [ ] Regla: solo IA que no entrene con los datos (Workers AI, incluidos modelos chinos alojados en Cloudflare, o Claude); nunca APIs directas de DeepSeek/Kimi.
+- [ ] Medir el consumo de IA por cliente (AI Gateway o neuronas por desarrolladora) para facturarlo al costo: **Ignia no absorbe IA ni WhatsApp**, los paga el cliente.

@@ -110,7 +110,45 @@ export const HISTORY_LABEL: Record<string, string> = {
   assigned: "Asignó vendedor",
   reassigned: "Reasignó vendedor",
   unassigned: "Quitó la asignación",
+  appointment_booked: "Agendó una cita",
+  appointment_rescheduled: "Reagendó la cita",
+  appointment_completed: "Asistió a la cita",
+  appointment_no_show: "No asistió a la cita",
+  appointment_cancelled: "Canceló la cita",
 };
+
+export const APPOINTMENT_STATUS_LABEL: Record<string, string> = {
+  scheduled: "Agendada",
+  completed: "Asistió",
+  no_show: "No asistió",
+  cancelled: "Cancelada",
+};
+
+export const WEEKDAY_LABEL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/** 600 → "10:00" */
+export const minutesToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+/** "10:00" → 600 */
+export const timeToMinutes = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+};
+
+/** Suma días a una fecha YYYY-MM-DD. */
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+const dayFmt = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+/** Solo la primera letra en mayúscula ("Jueves 8 de octubre", no "Jueves 8 De Octubre"). */
+export const capitalize = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+/** "2026-10-08" → "Jueves 8 de octubre" */
+export const dayLabel = (iso: string) => capitalize(dayFmt.format(new Date(`${iso}T12:00:00Z`)));
+const shortFmt = new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Mexico_City" });
+/** Instante → "jue 8 oct, 10:00" (hora del centro de México). */
+export const shortDateTime = (ms: number) => shortFmt.format(new Date(ms)).replace(/\./g, "");
 
 export const ROLE_LABEL: Record<string, string> = { admin: "Ignia", owner: "Dueño", manager: "Gerente", seller: "Vendedor" };
 

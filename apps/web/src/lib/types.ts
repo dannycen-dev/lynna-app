@@ -45,6 +45,7 @@ export type Summary = {
   tenant: Tenant;
   developments: DevelopmentSummary[];
   prospects: { prospects: number; newLast24h: number };
+  appointments: { today: number; next7Days: number };
 };
 
 export type Lot = {
@@ -170,6 +171,7 @@ export type Prospect = {
   assignedName: string | null;
   updatedAt: number;
   messageCount: number;
+  nextAppointmentAt: number | null;
 };
 
 export type TeamMember = {
@@ -205,11 +207,48 @@ export type ProspectDetail = {
   notes: ProspectNote[];
   history: HistoryItem[];
   lastAi: AiAudit | null;
+  appointments: (Appointment & { sellerName: string; label: string })[];
+};
+
+export type AppointmentStatus = "scheduled" | "completed" | "no_show" | "cancelled";
+
+export type Appointment = {
+  id: string;
+  prospectId: string;
+  userId: string;
+  developmentId: string | null;
+  startsAt: number;
+  endsAt: number;
+  status: AppointmentStatus;
+  source: "ai" | "user";
+  notes: string | null;
+  cancelReason: string | null;
+  createdAt: number;
+};
+
+export type AgendaItem = Appointment & {
+  prospectName: string;
+  prospectStage: string;
+  sellerName: string;
+  developmentName: string | null;
+  label: string;
+  date: string; // YYYY-MM-DD local
+  time: string; // HH:MM local
+};
+
+export type Slot = { userId: string; userName: string; startsAt: number; endsAt: number; label: string; date: string; time: string };
+
+export type AvailabilityRule = { weekday: number; startMinute: number; endMinute: number };
+
+export type Availability = {
+  timezone: string;
+  appointmentMinutes: number;
+  members: { id: string; name: string; role: UserRole; rules: AvailabilityRule[] }[];
 };
 
 export type AppNotification = {
   id: string;
-  kind: "handoff" | "assignment" | "system";
+  kind: "handoff" | "assignment" | "appointment" | "system";
   title: string;
   body: string | null;
   prospectId: string | null;

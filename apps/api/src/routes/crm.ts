@@ -3,10 +3,12 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { canSendWhatsApp } from "../agent/respond";
 import { actorOf, type AuthVariables, type Principal } from "../auth/middleware";
+import { slotLabel } from "../crm/agenda";
 import { assignProspect, isSeller, prospectScope, tenantUsers } from "../crm/assignment";
 import { getDb, type Db } from "../db/client";
 import {
   aiAuditLog,
+  appointments,
   auditLog,
   conversations,
   MESSAGE_STATUS_RANK,
@@ -61,7 +63,7 @@ crm.get("/prospects/:id", async (c) => {
     .orderBy(desc(conversations.lastInboundAt))
     .get();
 
-  const [msgs, notes, history, lastAi] = await Promise.all([
+  const [msgs, notes, history, lastAi, appts] = await Promise.all([
     conversation
       ? db.select().from(messages).where(eq(messages.conversationId, conversation.conversation.id)).orderBy(asc(messages.createdAt)).limit(500)
       : Promise.resolve([]),
@@ -80,6 +82,13 @@ crm.get("/prospects/:id", async (c) => {
     conversation
       ? db.select().from(aiAuditLog).where(eq(aiAuditLog.conversationId, conversation.conversation.id)).orderBy(desc(aiAuditLog.createdAt)).limit(1).get()
       : Promise.resolve(undefined),
+    db
+      .select({ appointment: appointments, sellerName: users.name })
+      .from(appointments)
+      .innerJoin(users, eq(users.id, appointments.userId))
+      .where(eq(appointments.prospectId, prospect.id))
+      .orderBy(desc(appointments.startsAt))
+      .limit(20),
   ]);
 
   // Nombres de los actores "user:<id>" del historial.
@@ -102,6 +111,7 @@ crm.get("/prospects/:id", async (c) => {
       actorName: h.actor === "ai" ? "IA" : h.actor === "system" ? "Sistema" : h.actor.startsWith("user:") ? (actorNames[h.actor.slice(5)] ?? "Usuario") : "Automatización",
     })),
     lastAi: lastAi ?? null,
+    appointments: appts.map((a) => ({ ...a.appointment, sellerName: a.sellerName, label: slotLabel(a.appointment.startsAt, c.var.tenant.timezone) })),
   });
 });
 

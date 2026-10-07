@@ -29,7 +29,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: "/prospectos", label: "Prospectos", icon: <Users size={18} /> },
       { to: "/agente", label: "Agente de IA", icon: <Bot size={18} /> },
       { to: "/conversaciones", label: "WhatsApp", icon: <MessageCircle size={18} />, soon: true },
-      { to: "/citas", label: "Citas", icon: <CalendarCheck size={18} />, soon: true },
+      { to: "/citas", label: "Citas", icon: <CalendarCheck size={18} /> },
     ],
   },
   {
