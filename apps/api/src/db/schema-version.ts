@@ -1,7 +1,7 @@
 // Última migración que este código necesita. Una prueba (test/schema-version.test.ts) obliga a
 // actualizarla con cada migración nueva; /health la compara con la base para detectar despliegues
 // con la base desactualizada (el smoke post-deploy falla si no coincide).
-export const EXPECTED_MIGRATION = "0009_agent_settings.sql";
+export const EXPECTED_MIGRATION = "0010_user_admin.sql";
 
 export async function schemaStatus(db: D1Database): Promise<{ ok: boolean; applied: string | null; expected: string }> {
   try {

@@ -31,6 +31,7 @@ import { prospectScope } from "../crm/assignment";
 import { listProspects, prospectFilters } from "../crm/prospect-list";
 import { agenda } from "./agenda";
 import { knowledge } from "./knowledge";
+import { userAdmin } from "./users";
 import { crm } from "./crm";
 import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
@@ -69,6 +70,10 @@ admin.use("/tenants/:tenant/*", async (c, next) => {
     path.endsWith("/simulate") || path.endsWith("/agent/simulator") || /\/(prospects|conversations|notifications|appointments|availability)(\/|$)/.test(path);
   if (c.req.method !== "GET" && !sellerAllowed && !canWrite(c.var.principal)) {
     return c.json({ error: "forbidden", message: "Tu rol no permite hacer este cambio." }, 403);
+  }
+  // Contraseña temporal sin cambiar: nada de la app hasta que la cambie (POST /api/auth/password).
+  if (c.var.principal.kind === "user" && c.var.principal.user.mustChangePassword) {
+    return c.json({ error: "password_change_required", message: "Cambia tu contraseña temporal para continuar." }, 403);
   }
   c.set("tenant", tenant);
   await next();
@@ -372,6 +377,7 @@ admin.get("/tenants/:tenant/conversations/:conversationId/messages", async (c) =
 admin.route("/tenants/:tenant", crm);
 admin.route("/tenants/:tenant", agenda);
 admin.route("/tenants/:tenant", knowledge);
+admin.route("/tenants/:tenant", userAdmin);
 
 // ── Agente de IA: simulador de WhatsApp ──────────────────────────────────────────
 

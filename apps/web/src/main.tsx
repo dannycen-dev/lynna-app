@@ -6,6 +6,8 @@ import { Layout } from "./components/Layout";
 import { Empty, Spinner } from "./components/ui";
 import { Agenda } from "./pages/Agenda";
 import { Metricas } from "./pages/Metricas";
+import { Cuenta, ForcedPasswordChange } from "./pages/Cuenta";
+import { Usuarios } from "./pages/Usuarios";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
 import { Configuracion } from "./pages/Configuracion";
 import { Conocimiento } from "./pages/Conocimiento";
@@ -27,9 +29,11 @@ const queryClient = new QueryClient({
 
 /** Sin sesión, todo lleva al login; con sesión, a la app. */
 function Protected() {
-  const { status } = useSession();
+  const { status, me } = useSession();
   if (status === "loading") return <Spinner label="Cargando Lynna…" />;
-  return status === "signed-in" ? <Layout /> : <Navigate to="/login" replace />;
+  if (status !== "signed-in") return <Navigate to="/login" replace />;
+  // Contraseña temporal: primero hay que cambiarla (la API también bloquea todo lo demás).
+  return me?.user.mustChangePassword ? <ForcedPasswordChange /> : <Layout />;
 }
 
 function LoginRoute() {
@@ -74,6 +78,8 @@ const router = createBrowserRouter([
       { path: "metricas", element: <Metricas /> },
       { path: "conocimiento", element: <Conocimiento /> },
       { path: "ajustes", element: <Configuracion /> },
+      { path: "usuarios", element: <Usuarios /> },
+      { path: "cuenta", element: <Cuenta /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],
   },

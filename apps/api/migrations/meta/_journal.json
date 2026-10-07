@@ -71,6 +71,13 @@
       "when": 1791346325592,
       "tag": "0009_agent_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791347749954,
+      "tag": "0010_user_admin",
+      "breakpoints": true
     }
   ]
 }

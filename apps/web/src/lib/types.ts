@@ -7,7 +7,7 @@ export type Tenant = { id: string; name: string; slug: string };
 export type UserRole = "admin" | "owner" | "manager" | "seller";
 
 export type Me = {
-  user: { id: string; tenantId: string | null; email: string; name: string; role: UserRole };
+  user: { id: string; tenantId: string | null; email: string; name: string; role: UserRole; mustChangePassword: boolean };
   tenants: Tenant[];
 };
 
@@ -370,3 +370,16 @@ export type Metrics = {
   appointments: { total: number; scheduled: number; completed: number; noShow: number; cancelled: number; showRate: number | null };
   sellers: { userId: string; name: string; prospects: number; appointments: number; won: number; lost: number }[];
 };
+
+export type ManagedUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  receivesLeads: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: number | null;
+  createdAt: number;
+};
+export type UsersResponse = { users: ManagedUser[]; manageableRoles: UserRole[]; me: string | null };

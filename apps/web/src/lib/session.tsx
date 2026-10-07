@@ -35,6 +35,7 @@ type Session = {
   canWrite: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<void>;
   setTenant: (slug: string) => void;
   expire: () => void;
 };
@@ -85,6 +86,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [expire]);
 
+  const changePassword = useCallback(
+    async (current: string, next: string) => {
+      await apiFetch<void>("/api/auth/password", { method: "POST", body: JSON.stringify({ current, next }) });
+      qc.setQueryData<Me | null>(ME_KEY, (prev) => (prev ? { ...prev, user: { ...prev.user, mustChangePassword: false } } : prev));
+    },
+    [qc],
+  );
+
   const setTenant = useCallback((slug: string) => {
     writeTenant(slug);
     setSelected(slug);
@@ -100,10 +109,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       canWrite: me ? me.user.role !== "seller" : false,
       signIn,
       signOut,
+      changePassword,
       setTenant,
       expire,
     }),
-    [meQuery.isPending, me, tenant, tenants, signIn, signOut, setTenant, expire],
+    [meQuery.isPending, me, tenant, tenants, signIn, signOut, changePassword, setTenant, expire],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

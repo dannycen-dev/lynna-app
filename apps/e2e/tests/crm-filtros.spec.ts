@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { USERS } from "../lib/env";
+import { adminHeaders, USERS } from "../lib/env";
 import { inboundText, randomMxPhone, signMeta } from "../lib/meta";
 
 // Filtros del CRM (en el servidor y en la URL), exportar CSV y métricas. Solo local/CI.
@@ -19,14 +19,17 @@ test("CRM: buscar y filtrar (en la URL), exportar CSV y ver métricas", async ({
   const name = `Filtro ${phone.slice(-5)}`;
   const { body } = inboundText(phone, "Hola, me interesan sus terrenos", undefined, name);
   expect((await request.post("/whatsapp/webhook", { headers: { "content-type": "application/json", "x-hub-signature-256": signMeta(body) }, data: body })).status()).toBe(200);
+  // El webhook procesa en una cola: esperar a que el prospecto exista antes de buscarlo en el panel.
+  await expect(async () => {
+    const rows = (await (await request.get(`/api/admin/tenants/demo/prospects?q=${encodeURIComponent(name)}`, { headers: adminHeaders })).json()) as unknown[];
+    expect(rows).toHaveLength(1);
+  }).toPass({ timeout: 20_000 });
 
   await login(page, "manager");
   await page.goto("/prospectos");
   const board = page.getByLabel("Tablero de prospectos");
-  await expect(async () => {
-    await page.getByLabel("Buscar prospecto").fill(name);
-    await expect(board.getByRole("article")).toHaveCount(1, { timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
+  await page.getByLabel("Buscar prospecto").fill(name);
+  await expect(board.getByRole("article")).toHaveCount(1);
   await expect(board.getByRole("article", { name: new RegExp(name) })).toBeVisible();
   await expect(page.getByText("1 prospecto", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(name).replace(/%20/g, "\\+|%20")}`));

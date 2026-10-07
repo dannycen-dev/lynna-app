@@ -4,6 +4,8 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  ManagedUser,
+  UsersResponse,
   Metrics,
   AgentSettings,
   PrivacySettings,
@@ -100,6 +102,7 @@ export function useProspects(filters: ProspectFilters = {}) {
     },
     enabled: tenant !== "",
     placeholderData: (prev) => prev, // al cambiar filtros no parpadea la lista
+    refetchInterval: 30_000, // llegan prospectos nuevos por WhatsApp sin recargar
   });
 }
 
@@ -479,3 +482,34 @@ export function useSaveAgentSettings() {
 }
 
 export const useMetrics = (days: 7 | 30 | 90) => useApiQuery<Metrics>(["metrics", days], `/metrics?days=${days}`);
+
+// ── Usuarios ──────────────────────────────────────────────────────────────────
+
+export const useUsers = (enabled = true) => useApiQuery<UsersResponse>(["users"], enabled ? "/users" : null);
+
+export function useCreateUser() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: { name: string; email: string; role: string }) =>
+      call<{ user: ManagedUser; temporaryPassword: string }>("/users", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("users", "team", "availability"),
+  });
+}
+
+export function useUpdateUser() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; role?: string; active?: boolean }) =>
+      call<{ user: ManagedUser; openProspects: number }>(`/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("users", "team", "availability"),
+  });
+}
+
+export function useResetPassword() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (id: string) => call<{ temporaryPassword: string }>(`/users/${encodeURIComponent(id)}/reset-password`, { method: "POST" }),
+  });
+}

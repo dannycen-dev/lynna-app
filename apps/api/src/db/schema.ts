@@ -316,6 +316,9 @@ export const users = sqliteTable(
     receivesLeads: integer("receives_leads", { mode: "boolean" }).notNull().default(true),
     lastAssignedAt: integer("last_assigned_at"),
     lastLoginAt: integer("last_login_at"),
+    // Contraseña temporal (alta o restablecimiento desde el panel): hay que cambiarla al entrar.
+    mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false),
+    passwordChangedAt: integer("password_changed_at"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("users_email_uq").on(t.email)],

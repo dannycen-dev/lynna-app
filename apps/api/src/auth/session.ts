@@ -1,4 +1,4 @@
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, ne } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Db } from "../db/client";
@@ -15,6 +15,8 @@ export type SessionUser = {
   email: string;
   name: string;
   role: UserRole;
+  /** Entró con una contraseña temporal: debe cambiarla antes de usar la app. */
+  mustChangePassword: boolean;
 };
 
 const encoder = new TextEncoder();
@@ -58,7 +60,15 @@ export async function readSession(c: Context, db: Db): Promise<SessionUser | nul
   const row = await db
     .select({
       expiresAt: sessions.expiresAt,
-      user: { id: users.id, tenantId: users.tenantId, email: users.email, name: users.name, role: users.role, active: users.active },
+      user: {
+        id: users.id,
+        tenantId: users.tenantId,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        active: users.active,
+        mustChangePassword: users.mustChangePassword,
+      },
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -78,6 +88,13 @@ export async function destroySession(c: Context, db: Db): Promise<void> {
   const token = getCookie(c, SESSION_COOKIE);
   if (token) await db.delete(sessions).where(eq(sessions.id, await sha256Hex(token)));
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
+}
+
+/** Cierra todas las sesiones de un usuario (desactivado, contraseña restablecida), salvo `keepSessionOf` (la actual). */
+export async function revokeUserSessions(c: Context | null, db: Db, userId: string, keepCurrent = false): Promise<void> {
+  const token = keepCurrent && c ? getCookie(c, SESSION_COOKIE) : undefined;
+  const keep = token ? await sha256Hex(token) : null;
+  await db.delete(sessions).where(and(eq(sessions.userId, userId), keep ? ne(sessions.id, keep) : undefined));
 }
 
 /** Cron: borra sesiones vencidas. */

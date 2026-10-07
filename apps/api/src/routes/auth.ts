@@ -2,10 +2,11 @@ import { and, asc, eq, gte } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { authenticate, type AuthVariables } from "../auth/middleware";
-import { DUMMY_HASH, hashPassword, verifyPassword } from "../auth/password";
-import { createSession, destroySession, type SessionUser } from "../auth/session";
+import { DUMMY_HASH, hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/password";
+import { createSession, destroySession, revokeUserSessions, type SessionUser } from "../auth/session";
 import { getDb, type Db } from "../db/client";
 import { loginAttempts, tenants, users } from "../db/schema";
+import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -66,7 +67,7 @@ auth.post("/login", async (c) => {
   await createSession(c, db, user.id);
   log("info", "auth.login", { userId: user.id, role: user.role });
 
-  const sessionUser: SessionUser = { id: user.id, tenantId: user.tenantId, email: user.email, name: user.name, role: user.role };
+  const sessionUser: SessionUser = { id: user.id, tenantId: user.tenantId, email: user.email, name: user.name, role: user.role, mustChangePassword: user.mustChangePassword };
   return c.json({ user: sessionUser, tenants: await accessibleTenants(db, sessionUser) });
 });
 
@@ -79,4 +80,28 @@ auth.get("/me", authenticate, async (c) => {
   const p = c.var.principal;
   if (p.kind !== "user") return c.json({ error: "not_a_user", message: "Este endpoint es para sesiones de usuario." }, 400);
   return c.json({ user: p.user, tenants: await accessibleTenants(getDb(c.env.DB), p.user) });
+});
+
+/** Cambiar mi contraseña (también la temporal). Cierra mis otras sesiones. */
+auth.post("/password", authenticate, async (c) => {
+  const p = c.var.principal;
+  if (p.kind !== "user") return c.json({ error: "not_a_user" }, 400);
+  const parsed = z
+    .object({ current: z.string().min(1).max(200), next: z.string().min(MIN_PASSWORD_LENGTH).max(200) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "validation", message: `La nueva contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` }, 400);
+  const { current, next } = parsed.data;
+  if (current === next) return c.json({ error: "validation", message: "La nueva contraseña debe ser distinta de la actual." }, 400);
+  const db = getDb(c.env.DB);
+  const user = await db.select().from(users).where(eq(users.id, p.user.id)).get();
+  if (!user || !(await verifyPassword(current, user.passwordHash)).ok) {
+    return c.json({ error: "invalid_credentials", message: "La contraseña actual no es correcta." }, 400);
+  }
+  const now = Date.now();
+  await db.batch([
+    db.update(users).set({ passwordHash: await hashPassword(next), mustChangePassword: false, passwordChangedAt: now }).where(eq(users.id, user.id)),
+    ...(user.tenantId ? [auditInsert(db, { tenantId: user.tenantId, actor: `user:${user.id}`, entity: "user", entityId: user.id, action: "password_changed" })] : []),
+  ]);
+  await revokeUserSessions(c, db, user.id, true);
+  return c.body(null, 204);
 });

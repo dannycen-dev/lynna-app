@@ -10,6 +10,7 @@ import {
   Menu,
   MessageCircle,
   Settings,
+  UserCog,
   Users,
   WalletCards,
   X,
@@ -19,7 +20,7 @@ import { NavLink, Outlet, useLocation } from "react-router";
 import { useSession } from "../lib/session";
 import { NotificationBell } from "./NotificationBell";
 
-type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; soon?: boolean };
+type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; soon?: boolean; hideForSeller?: boolean };
 
 // Mismo orden que el sidebar de la app Inmobiliaria en Lynna (Odoo).
 const NAV: { section?: string; items: NavItem[] }[] = [
@@ -43,7 +44,13 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: "/planes", label: "Planes de pago", icon: <WalletCards size={18} /> },
     ],
   },
-  { section: "Ajustes", items: [{ to: "/ajustes", label: "Configuración", icon: <Settings size={18} /> }] },
+  {
+    section: "Ajustes",
+    items: [
+      { to: "/ajustes", label: "Configuración", icon: <Settings size={18} /> },
+      { to: "/usuarios", label: "Usuarios", icon: <UserCog size={18} />, hideForSeller: true },
+    ],
+  },
 ];
 
 const ENV_LABEL: Record<string, string> = { localhost: "local", "127.0.0.1": "local" };
@@ -107,7 +114,7 @@ export function Layout() {
           <span className="navbar__tenant navbar__hide-sm">{tenants[0]?.name}</span>
         )}
         {me && (
-          <span className="navbar__user navbar__hide-sm" title={me.user.email}>
+          <NavLink to="/cuenta" className="navbar__user navbar__hide-sm" title={`${me.user.email} · Mi cuenta`}>
             <span className="navbar__avatar" aria-hidden>
               {initials(me.user.name)}
             </span>
@@ -115,7 +122,7 @@ export function Layout() {
               <span className="navbar__user-name">{me.user.name}</span>
               <span className="navbar__user-role">{roleLabel}</span>
             </span>
-          </span>
+          </NavLink>
         )}
         <NotificationBell />
         <button className="navbar__btn" onClick={() => void signOut()} title="Cerrar sesión">
@@ -128,7 +135,7 @@ export function Layout() {
         {NAV.map((group, i) => (
           <div key={group.section ?? i}>
             {group.section && <div className="sidebar__section">{group.section}</div>}
-            {group.items.map((item) =>
+            {group.items.filter((item) => !(item.hideForSeller && me?.user.role === "seller")).map((item) =>
               item.soon ? (
                 <span key={item.to} className="sidebar__link sidebar__link--disabled" aria-disabled>
                   {item.icon}
