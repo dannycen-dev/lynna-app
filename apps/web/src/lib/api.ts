@@ -91,9 +91,11 @@ export function filtersQuery(f: ProspectFilters): string {
 }
 
 /** Prospectos con filtros del lado del servidor; `total` dice cuántos hay aunque la lista venga recortada. */
-export function useProspects(filters: ProspectFilters = {}) {
+export const PROSPECTS_PAGE = 200;
+
+export function useProspects(filters: ProspectFilters = {}, limit = PROSPECTS_PAGE) {
   const { tenant, expire } = useSession();
-  const qs = filtersQuery(filters);
+  const qs = [filtersQuery(filters), limit !== PROSPECTS_PAGE ? `limit=${limit}` : ""].filter(Boolean).join("&");
   return useQuery({
     queryKey: [tenant, "prospects", qs],
     queryFn: async () => {

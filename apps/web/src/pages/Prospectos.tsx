@@ -2,7 +2,7 @@ import { Bot, CalendarCheck, Columns3, Download, List, MessageCircle, UserRoundC
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useChangeStage, useDevelopments, useProspects, useProspectsCsvUrl, useTeam, type ProspectFilters } from "../lib/api";
+import { PROSPECTS_PAGE, useChangeStage, useDevelopments, useProspects, useProspectsCsvUrl, useTeam, type ProspectFilters } from "../lib/api";
 import { dateTime, HANDOFF_LABEL, initials, money, num, shortDateTime, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
 import { useSession } from "../lib/session";
 import type { Prospect, ProspectStage } from "../lib/types";
@@ -48,7 +48,11 @@ export function Prospectos() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, filters.q]);
-  const prospects = useProspects(filters);
+  // "Cargar más": crece de 200 en 200 y vuelve a 200 al cambiar los filtros.
+  const filterKey = FILTER_KEYS.map((k) => filters[k] ?? "").join("|");
+  const [limit, setLimit] = useState(PROSPECTS_PAGE);
+  useEffect(() => setLimit(PROSPECTS_PAGE), [filterKey]);
+  const prospects = useProspects(filters, limit);
   const csvUrl = useProspectsCsvUrl(filters);
   const items = prospects.data?.items ?? [];
   const total = prospects.data?.total ?? items.length;
@@ -138,7 +142,7 @@ export function Prospectos() {
         </div>
         {prospects.data && (
           <span className="muted" aria-live="polite">
-            {total > items.length ? `Mostrando ${num(items.length)} de ${num(total)} — usa los filtros para acotar` : `${num(total)} prospecto${total === 1 ? "" : "s"}`}
+            {total > items.length ? `Mostrando ${num(items.length)} de ${num(total)}, los más recientes` : `${num(total)} prospecto${total === 1 ? "" : "s"}`}
           </span>
         )}
       </div>
@@ -150,6 +154,13 @@ export function Prospectos() {
         </Empty>
       )}
       {items.length > 0 && (view === "tablero" ? <Board prospects={items} /> : <ProspectTable prospects={items} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
+      {total > items.length && (
+        <div className="row" style={{ justifyContent: "center", marginTop: 16 }}>
+          <button className="btn" disabled={prospects.isFetching} onClick={() => setLimit((l) => l + PROSPECTS_PAGE)}>
+            {prospects.isFetching ? "Cargando…" : `Cargar ${num(Math.min(PROSPECTS_PAGE, total - items.length))} más`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

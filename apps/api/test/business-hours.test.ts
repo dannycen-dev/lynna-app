@@ -4,7 +4,7 @@ import type { Completion, LlmClient } from "../src/agent/llm";
 import { runAgent } from "../src/agent/runner";
 import { hashPassword } from "../src/auth/password";
 import { localToEpoch, weekdayOf } from "../src/crm/agenda";
-import { advisorEta, isOpen } from "../src/crm/business-hours";
+import { advisorEta, isOpen, openMinutesBetween } from "../src/crm/business-hours";
 import { getDb } from "../src/db/client";
 import { addDays, todayIn } from "../src/financing/dates";
 
@@ -35,6 +35,20 @@ describe("horario de atención", () => {
     // Sin horario configurado no se promete nada distinto.
     expect(advisorEta(null, TZ, at("2026-10-11", 3))).toBe("en breve");
     expect(advisorEta([], TZ, at("2026-10-11", 3))).toBe("en breve");
+  });
+});
+
+describe("tiempo de respuesta del asesor en horario de oficina", () => {
+  it("no cuenta noches, fines de semana ni días festivos", () => {
+    // Viernes 23:00 → lunes 9:05 = 5 min de oficina (el sábado 9–14 se cuenta si se atiende ese día).
+    expect(openMinutesBetween(OFFICE, TZ, at("2026-10-09", 23), at("2026-10-12", 9, 5))).toBe(5 + 300);
+    expect(openMinutesBetween(OFFICE, TZ, at("2026-10-10", 15), at("2026-10-12", 9, 5))).toBe(5);
+    // Dentro del horario cuenta corrido.
+    expect(openMinutesBetween(OFFICE, TZ, at("2026-10-09", 10), at("2026-10-09", 10, 20))).toBe(20);
+    // Lunes festivo: martes 9:05 = 5 min.
+    expect(openMinutesBetween(OFFICE, TZ, at("2026-10-10", 15), at("2026-10-13", 9, 5), new Set(["2026-10-12"]))).toBe(5);
+    // Sin horario: tiempo corrido.
+    expect(openMinutesBetween(null, TZ, at("2026-10-09", 23), at("2026-10-10", 1))).toBe(120);
   });
 });
 

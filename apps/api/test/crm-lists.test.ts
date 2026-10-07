@@ -74,6 +74,12 @@ describe("CRM: filtros del listado", () => {
     const res = await laura("/prospects?owner=u-miguel");
     expect(res.headers.get("x-total-count")).toBe("2");
     expect((await laura("/prospects?temperature=hirviendo")).status).toBe(400);
+    // Paginación "cargar más": limit recorta la lista (los más recientes primero) y el total no cambia.
+    const page = await laura("/prospects?limit=1");
+    expect(Number(page.headers.get("x-total-count"))).toBeGreaterThan(1);
+    expect(((await page.json()) as unknown[]).length).toBe(1);
+    expect((await laura("/prospects?limit=0")).status).toBe(400);
+    expect((await laura("/prospects?limit=5000")).status).toBe(400);
   });
 
   it("un vendedor solo ve los suyos, aunque filtre por otro", async () => {
@@ -133,7 +139,7 @@ describe("CRM: métricas", () => {
     // p4 tuvo cita (aunque no asistió): llegó a "Cita agendada", así que también cuenta como calificado.
     expect(reached).toMatchObject({ new: 4, qualified: 4, appointment: 3, visited: 2, negotiation: 2, won: 1 });
     expect(m.lostReasons).toEqual([{ reason: "Compró en otro desarrollo", count: 1 }]);
-    expect(m.response).toMatchObject({ aiMedianSeconds: 4, aiSamples: 1, advisorMedianMinutes: 20, advisorWithin30Min: 1, handoffs: 1, handoffsPending: 0 });
+    expect(m.response).toMatchObject({ aiMedianSeconds: 4, aiSamples: 1, advisorMedianMinutes: 20, advisorWithin30Min: 1, handoffs: 1, handoffsPending: 0, advisorBusinessHours: false });
     expect(m.appointments).toMatchObject({ total: 2, completed: 1, noShow: 1, showRate: 0.5 });
     expect(m.sellers.find((s: { name: string }) => s.name === "Miguel")).toMatchObject({ prospects: 2, appointments: 1, won: 1, lost: 1 });
 

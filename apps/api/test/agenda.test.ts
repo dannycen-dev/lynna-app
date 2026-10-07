@@ -362,7 +362,7 @@ describe("agenda: varios horarios por día y días libres", () => {
     // Miguel registra sus vacaciones: ya no se le ofrecen horarios esos días (ni la IA ni el panel).
     const vac = await miguel.call("/time-off", "POST", { userId: "u-miguel", startDate: tomorrow(), endDate: addDays(tomorrow(), 2), reason: "Vacaciones" });
     expect(vac.status).toBe(201);
-    expect((await vac.json()).conflicts).toEqual([]);
+    expect(((await vac.json()) as { conflicts: unknown[] }).conflicts).toEqual([]);
     expect(await laura.json(`/appointments/slots?date=${tomorrow()}&prospectId=p-0001`)).toEqual([]);
     expect(times(await laura.json(`/appointments/slots?date=${addDays(tomorrow(), 3)}&prospectId=p-0001`))).toContain("10:00");
 

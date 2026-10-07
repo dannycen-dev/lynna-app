@@ -87,12 +87,12 @@
 ### 2.6 Registro de nombre, teléfono y datos
 - [x] Alta automática de prospecto al primer mensaje (teléfono de WhatsApp + nombre de perfil).
 - [x] Tool `actualizar_prospecto(campos)` con lista blanca de campos (nombre, correo, ciudad, presupuesto…).
-- [ ] Consentimiento / aviso de privacidad enviado en el primer contacto (LFPDPPP).
+- [x] Consentimiento / aviso de privacidad enviado en el primer contacto (LFPDPPP). — _2026-10-07; el texto legal final lo debe revisar el cliente_
 - [x] Un contacto existente no se duplica: se reutiliza y se añade al historial.
 
 ### 2.7 Seguimiento automático a prospectos que no concretaron
-- [ ] **Workflow** por prospecto: secuencia configurable (p. ej. +1 día, +3 días, +7 días) con `step.sleep`.
-- [ ] Se cancela si el prospecto responde, agenda cita, pide no ser contactado o un vendedor toma la conversación.
+- [x] Secuencia por prospecto configurable (+1, +3, +7 días). — _hecha con cron cada 15 min en lugar de Workflows (ver §11)_
+- [x] Se cancela si el prospecto responde, agenda cita, pide no ser contactado o un vendedor toma la conversación.
 - [ ] Fuera de 24 h solo **plantillas aprobadas por Meta** (categoría marketing/utility).
 - [x] Opt-out ("ya no me escriban", "baja") respetado y registrado.
 - **Acepta:** ningún prospecto con opt-out recibe mensajes.
@@ -128,8 +128,8 @@
 - [x] Pipeline kanban: Nuevo → Calificado → Cita agendada → Visitó → Negociación → Apartado → Vendido / Perdido. — _tablero con arrastre; "perdido" exige motivo_
 - [x] Ficha del prospecto con conversación completa de WhatsApp, notas, actividades y citas. — _conversación, datos, notas e historial; citas en Fase 5_
 - [x] **Bandeja de conversaciones**: el vendedor puede tomar el control (la IA se pausa en esa conversación) y devolverlo. — _tomar/devolver desde la ficha; la IA se pausa_
-- [ ] Filtros por vendedor, desarrollo, score y etapa; exportación CSV. — _hecho: filtro por vendedor y etapas en el tablero; faltan desarrollo/score y CSV_
-- [ ] Dashboard: prospectos por fuente, conversión por etapa, tiempo de primera respuesta, citas.
+- [x] Filtros por vendedor, desarrollo, score y etapa; exportación CSV. — _2026-10-07, dev (filtros en el servidor y en la URL; ver §11)_
+- [x] Dashboard: prospectos por fuente, conversión por etapa, tiempo de primera respuesta, citas. — _página Métricas, 2026-10-07_
 - [x] Permisos: el vendedor solo ve sus prospectos; el gerente ve todo. — _API (404 en ajenos) e interfaz; también conversaciones y avisos_
 
 ### 2.13 WhatsApp Business por la API oficial
@@ -293,7 +293,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] **Configuración por desarrolladora**: nombre del asistente y horario de atención de la oficina (fuera de horario la IA promete el contacto para cuando abre: "mañana a partir de las 9:00", en vez de "en breve"); aviso de privacidad (ya hecho); formas de pago → base de conocimiento. — _2026-10-07, dev; eval 19/19 con la oficina cerrada_
 - [x] Red de seguridad: si el prospecto pide hablar con una persona ("¿me puede marcar un asesor?"), se turna. — _caso real visto en dev_
 - [x] **CRM**: filtros en el servidor (búsqueda por nombre/teléfono/correo, desarrollo, calificación, origen, vendedor, fechas; en la URL), exportar CSV (gerente/dueño; protegido contra fórmulas de Excel; queda en el historial) y página **Métricas** (embudo por la etapa más avanzada, respuesta de la IA, tiempo hasta que atiende un asesor, citas y asistencia, motivos de traspaso y de pérdida, por vendedor; 7/30/90 días). — _2026-10-07, dev_
-- [ ] CRM, mejoras: el tablero carga hasta 500 prospectos (avisa si hay más); paginar/virtualizar cuando el volumen real lo pida. Tiempo de atención de asesores en horas hábiles (hoy cuenta noches y fines de semana).
+- [x] CRM, mejoras: la lista carga 200 prospectos (los más recientes) y "Cargar más" trae los siguientes 200; el tiempo de atención de asesores cuenta solo horario de oficina (sin noches, fines de semana ni días festivos). — _2026-10-07, dev_
 - [x] **Usuarios desde el panel**: alta con contraseña temporal (se muestra una vez; el servidor bloquea la API hasta cambiarla), roles (dueño administra todo; gerente solo vendedores), desactivar/reactivar (cierra sesiones y avisa cuántos prospectos tenía), restablecer contraseña y "Mi cuenta" para cambiar la propia. Siempre queda un dueño activo; nadie se desactiva a sí mismo. — _2026-10-07, dev_
 - [x] **Apartado vencido**: avisos 24 h antes y al liberarse (§2.11). — _2026-10-07, dev_
 - [x] **Seguimientos automáticos** (§2.7): secuencia configurable (hasta 5 pasos, espera y texto con {nombre}/{desarrollo}); se detiene si responde (y reinicia después), agenda cita, pide baja, se turna, un asesor la toma, la pausan o ya apartó/compró/perdió; solo en horario de oficina. Cron cada 15 min en lugar de Workflows (más simple, mismo resultado). — _2026-10-07, dev; el envío real (plantilla de marketing de Meta) llega con WhatsApp: hoy quedan "simulados" en la conversación_

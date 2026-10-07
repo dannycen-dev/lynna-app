@@ -374,11 +374,15 @@ admin.get("/tenants/:tenant/usage", async (c) => {
   return c.json({ month, usdPer1000Neurons: USD_PER_1000_NEURONS, usage });
 });
 
+// Página de prospectos: los más recientes primero; el panel pide más con "Cargar más" (limit crece de 200 en 200).
+const prospectPage = prospectFilters.extend({ limit: z.coerce.number().int().min(1).max(2000).default(200) });
+
 admin.get("/tenants/:tenant/prospects", async (c) => {
-  const parsed = prospectFilters.safeParse(c.req.query());
+  const parsed = prospectPage.safeParse(c.req.query());
   if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
-  const { rows, total } = await listProspects(getDb(c.env.DB), c.var.tenant, c.var.principal, parsed.data);
-  // Si hay más de los que se devuelven, el panel avisa que conviene filtrar.
+  const { limit, ...filters } = parsed.data;
+  const { rows, total } = await listProspects(getDb(c.env.DB), c.var.tenant, c.var.principal, filters, limit);
+  // Si hay más de los que se devuelven, el panel ofrece cargar más (o filtrar).
   c.header("x-total-count", String(total));
   return c.json(rows);
 });

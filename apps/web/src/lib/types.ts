@@ -368,6 +368,8 @@ export type Metrics = {
     aiSamples: number;
     advisorMedianMinutes: number | null;
     advisorWithin30Min: number | null;
+    /** Los tiempos del asesor cuentan solo el horario de oficina. */
+    advisorBusinessHours: boolean;
     handoffs: number;
     handoffsPending: number;
     handoffReasons: { reason: string; count: number }[];

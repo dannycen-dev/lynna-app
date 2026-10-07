@@ -75,3 +75,23 @@ test("CRM: buscar y filtrar (en la URL), exportar CSV y ver métricas", async ({
   await expect(seller.getByRole("link", { name: "Exportar CSV" })).toHaveCount(0);
   await seller.close();
 });
+
+test("CRM: con más de 200 prospectos, 'Cargar más' pide la siguiente página", async ({ page }) => {
+  // Se simula el volumen: la primera página dice que hay 201 y trae uno; "Cargar más" pide limit=400.
+  const requested: string[] = [];
+  await page.route(/\/api\/admin\/tenants\/demo\/prospects(\?|$)/, async (route) => {
+    const url = new URL(route.request().url());
+    requested.push(url.searchParams.get("limit") ?? "");
+    const res = await route.fetch();
+    const rows = (await res.json()) as unknown[];
+    if (url.searchParams.get("limit")) return route.fulfill({ response: res, json: rows });
+    await route.fulfill({ response: res, json: rows.slice(0, 1), headers: { ...res.headers(), "x-total-count": "201" } });
+  });
+  await login(page, "manager");
+  await page.goto("/prospectos");
+  await expect(page.getByText("Mostrando 1 de 201, los más recientes")).toBeVisible();
+  await page.getByRole("button", { name: "Cargar 200 más" }).click();
+  await expect(page.getByRole("button", { name: /^Cargar \d+ más$/ })).toHaveCount(0);
+  expect(requested).toContain("400");
+  await page.unrouteAll({ behavior: "ignoreErrors" }); // la lista se refresca sola cada 30 s
+});

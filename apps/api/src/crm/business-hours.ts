@@ -54,3 +54,26 @@ export function advisorEta(hours: BusinessHours | null | undefined, timeZone: st
   const day = new Intl.DateTimeFormat("es-MX", { timeZone, weekday: "long", day: "numeric", month: "long" }).format(new Date(next)).replace(",", "");
   return `el ${day} a partir de las ${hour}`;
 }
+
+/**
+ * Minutos de oficina abierta entre dos instantes (para medir cuánto tarda un asesor sin contar noches,
+ * fines de semana ni días festivos). Sin horario configurado cuenta el tiempo corrido.
+ */
+export function openMinutesBetween(hours: BusinessHours | null | undefined, timeZone: string, from: number, to: number, closed?: Set<string>): number {
+  if (to <= from) return 0;
+  if (!hours?.length) return (to - from) / 60_000;
+  let total = 0;
+  const last = localParts(to, timeZone).date;
+  // Tope de 90 días: más que eso ya no cambia la lectura de la métrica.
+  for (let date = localParts(from, timeZone).date, i = 0; date <= last && i < 90; date = addDays(date, 1), i++) {
+    if (closed?.has(date)) continue;
+    const weekday = weekdayOf(date);
+    for (const h of hours) {
+      if (h.weekday !== weekday) continue;
+      const start = Math.max(from, localToEpoch(date, h.startMinute, timeZone));
+      const end = Math.min(to, localToEpoch(date, h.endMinute, timeZone));
+      if (end > start) total += end - start;
+    }
+  }
+  return total / 60_000;
+}

@@ -4,6 +4,8 @@ import type { Db } from "../db/client";
 import { appointments, auditLog, conversations, messages, PROSPECT_STAGES, prospects, tenants, users } from "../db/schema";
 import { addDays, todayIn } from "../financing/dates";
 import { localToEpoch } from "./agenda";
+import { openMinutesBetween } from "./business-hours";
+import { timeOffBetween } from "./time-off";
 import { isSeller, prospectScope } from "./assignment";
 
 // Métricas del CRM para un periodo (prospectos cuyo primer contacto cae en el periodo = "cohorte").
@@ -22,7 +24,13 @@ const median = (xs: number[]) => {
 
 export type Metrics = Awaited<ReturnType<typeof computeMetrics>>;
 
-export async function computeMetrics(db: Db, tenant: Pick<typeof tenants.$inferSelect, "id" | "timezone">, principal: Principal, days: number, now = Date.now()) {
+export async function computeMetrics(
+  db: Db,
+  tenant: Pick<typeof tenants.$inferSelect, "id" | "timezone" | "businessHours">,
+  principal: Principal,
+  days: number,
+  now = Date.now(),
+) {
   const tz = tenant.timezone;
   const today = todayIn(tz, new Date(now));
   const fromDate = addDays(today, -(days - 1));
@@ -107,7 +115,15 @@ export async function computeMetrics(db: Db, tenant: Pick<typeof tenants.$inferS
     }
     if (m.author === "user") humanAfter.set(m.conversationId, Math.min(humanAfter.get(m.conversationId) ?? Infinity, m.createdAt));
   }
-  // Después de turnar a un asesor: cuánto tardó una persona en tomar la conversación o escribir.
+  // Después de turnar a un asesor: cuánto tardó una persona en tomar la conversación o escribir. Se cuentan
+  // solo minutos de oficina abierta (si hay horario): un turno a las 23:00 atendido a las 9:05 son 5 min.
+  const officeClosed = new Set(
+    (await timeOffBetween(db, tenant.id, fromDate, today)).filter((t) => t.userId === null).flatMap((t) => {
+      const dates: string[] = [];
+      for (let d = t.startDate < fromDate ? fromDate : t.startDate; d <= t.endDate && d <= today; d = addDays(d, 1)) dates.push(d);
+      return dates;
+    }),
+  );
   const advisorMinutes: number[] = [];
   let handoffsPending = 0;
   const handoffReasons = new Map<string, number>();
@@ -117,7 +133,7 @@ export async function computeMetrics(db: Db, tenant: Pick<typeof tenants.$inferS
     const conv = [...convByProspect.values()].find((c) => c.prospectId === p.id);
     const times = [conv?.takenAt, conv ? humanAfter.get(conv.id) : undefined].filter((t): t is number => typeof t === "number" && t >= p.handoffAt!);
     if (times.length === 0) handoffsPending++;
-    else advisorMinutes.push((Math.min(...times) - p.handoffAt) / 60_000);
+    else advisorMinutes.push(openMinutesBetween(tenant.businessHours, tz, p.handoffAt, Math.min(...times), officeClosed));
   }
 
   // ── Citas del periodo (por fecha de la cita) ──
@@ -156,6 +172,8 @@ export async function computeMetrics(db: Db, tenant: Pick<typeof tenants.$inferS
       aiMedianSeconds: median(aiFirst),
       aiSamples: aiFirst.length,
       advisorMedianMinutes: median(advisorMinutes),
+      /** true: los tiempos del asesor cuentan solo el horario de oficina. */
+      advisorBusinessHours: Boolean(tenant.businessHours?.length),
       advisorWithin30Min: advisorMinutes.length ? advisorMinutes.filter((m) => m <= 30).length / advisorMinutes.length : null,
       handoffs: cohort.filter((p) => p.handoffAt).length,
       handoffsPending,

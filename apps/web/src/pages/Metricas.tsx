@@ -90,7 +90,7 @@ export function Metricas() {
                 <dl className="dl">
                   <dt>Turnados a un asesor</dt>
                   <dd className="num">{num(m.response.handoffs)}</dd>
-                  <dt>Tiempo hasta que un asesor atiende</dt>
+                  <dt>Tiempo hasta que un asesor atiende{m.response.advisorBusinessHours && <span className="muted"> (en horario de oficina)</span>}</dt>
                   <dd className="num">{m.response.advisorMedianMinutes === null ? "Sin datos aún" : `${minutes(m.response.advisorMedianMinutes)} (mediana)`}</dd>
                   <dt>Atendidos en 30 min o menos</dt>
                   <dd className="num">{pct(m.response.advisorWithin30Min)}</dd>
