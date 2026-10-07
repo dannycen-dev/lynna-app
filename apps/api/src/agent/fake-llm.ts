@@ -57,6 +57,13 @@ export const fakeLlm: LlmClient = {
       if (horarios.length === 0) return say("Por ahora no tengo horarios de visita; un asesor te contactará para agendar.");
       return say(`Tengo estos horarios para visitar el desarrollo: ${horarios.slice(0, 3).map((h) => `${h.etiqueta} (${h.fecha} ${h.hora})`).join("; ")}. ¿Cuál te acomoda?`);
     }
+    if (/\b(agua|luz|drenaje|servicios|efectivo|requisitos|reglamento|construir|oficina|mascotas)\b/.test(text)) {
+      const info = result("consultar_informacion");
+      if (!info) return call("consultar_informacion", { pregunta: text });
+      const articulos = (JSON.parse(info).articulos ?? []) as { titulo: string; contenido: string }[];
+      if (articulos.length === 0) return say("No tengo esa información confirmada; un asesor te la puede confirmar.");
+      return say(`Según la información de la desarrolladora: ${articulos[0]!.contenido}`);
+    }
     if (/\b(lote|lotes|terreno|terrenos|disponible)\b/.test(text)) {
       const found = result("buscar_lotes");
       if (!found) return call("buscar_lotes", {});

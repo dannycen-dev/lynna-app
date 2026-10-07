@@ -61,7 +61,7 @@
 - [x] Modelo de datos: `developments`, `lots` (manzana, número, m², precio/m², precio total, estado, frente/fondo, orientación, coordenadas/GeoJSON). — _orientación pendiente; GeoJSON en columna `geojson`_
 - [x] Tool de IA `buscar_lotes(desarrollo, presupuesto_max, m2_min, …)` → consulta **en vivo** a D1, solo lotes `disponible`. — _consulta en vivo, solo disponibles, máx. 6_
 - [x] Tool `info_desarrollo(id)` → amenidades, ubicación, servicios, etapa. — _implementada como `listar_desarrollos`_
-- [ ] Base de conocimiento (FAQ, reglamento, proceso de compra) indexada en **Vectorize** para preguntas abiertas.
+- [x] Base de conocimiento (FAQ, reglamento, proceso de compra) para preguntas abiertas. — _2026-10-07: índice de texto completo **FTS5 en D1** en lugar de Vectorize (para decenas de textos es más simple y exacto, sin neuronas ni otro recurso); Vectorize queda como opción si crece. Solo textos **aprobados** llegan a la IA; tool `consultar_informacion`; página "Base de conocimiento" con probador; 8 textos de EJEMPLO en dev_
 - **Acepta:** la IA nunca menciona un lote que no venga del resultado de una tool.
 
 ### 2.3 Envío de precios, medidas, ubicación, fotos, planos y características
@@ -287,7 +287,8 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 
 ### Pendientes sin WhatsApp (orden propuesto)
 - [x] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel. — _2026-10-07, dev; eval del agente 13/13 (incluye agendar y cancelar)_
-- [ ] **Base de conocimiento** (§2.2): FAQ, requisitos para escriturar, formas de pago — textos aprobados por el cliente (Vectorize).
+- [x] **Base de conocimiento** (§2.2): FAQ, requisitos, formas de pago — solo textos aprobados. — _2026-10-07, dev; eval 16/16. Faltan los textos REALES del cliente (hoy son de ejemplo)_
+- [ ] Ajuste menor: cuando la red de seguridad ya turnó (p. ej. escrituras), la IA a veces pregunta "¿quieres que un asesor te contacte?" en lugar de afirmar que lo hará.
 - [ ] **Configuración por desarrolladora**: nombre del asistente, horario de atención, texto del aviso de privacidad, formas de pago.
 - [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
 - [ ] **Usuarios desde el panel**: alta, roles, desactivar, cambiar contraseña (hoy por script `pnpm user:create`).

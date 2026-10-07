@@ -62,8 +62,8 @@ Usuarios ficticios de demo (uno por rol, desarrolladora `demo`, contraseña `Lyn
 | ana.hernandez@lynna.mx | seller |
 
 Datos ficticios del CRM (12 prospectos en todas las etapas, conversaciones, notas, historial y avisos,
-repartidos entre Miguel y Ana, más uno sin asignar; horario de citas de Miguel y Ana y 5 citas) — ya cargados
-en **dev** y **stg**:
+repartidos entre Miguel y Ana, más uno sin asignar; horario de citas de Miguel y Ana, 5 citas y 8 textos de ejemplo
+de la base de conocimiento) — cargados en **dev**:
 `pnpm demo:crm --target local|dev|stg` (idempotente; nunca en prod). Corre antes `pnpm demo:users`.
 
 ## Usuarios y acceso
@@ -130,13 +130,16 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
 | `respond.ts` | Contexto, bitácora `ai_audit_log` y envío por WhatsApp (o "simulado" sin credenciales de Meta) |
 
 - **Simulador**: en el panel, *Agente de IA*. Mismo código que WhatsApp, sin Meta.
+- **Base de conocimiento** (`apps/api/src/knowledge/`): textos que aprueba la desarrolladora (servicios, proceso de
+  compra, formas de pago…) en el panel, con un probador "como la IA". Búsqueda con FTS5 en D1 (`kb_fts`, mantenido por
+  triggers); la IA solo ve los **aprobados** y sus montos/horas cuentan como datos verificados para el validador.
 - **Agenda** (`apps/api/src/crm/agenda.ts`): horario semanal por vendedor (Configuración), citas en *Citas* y en la
   ficha. La IA ofrece horarios libres reales y agenda con el vendedor del prospecto si tiene horario (si no, con
   quien esté libre). Un índice único `(vendedor, inicio)` en D1 impide dos citas a la misma hora aunque lleguen
   simultáneas. El cron avisa al vendedor 2 h antes. Los recordatorios al prospecto por WhatsApp llegan con la Fase 2.
 - **Modelo**: `AI_MODEL` en `wrangler.jsonc` por entorno. Para elegirlo con datos:
   `pnpm --filter @lynna/api eval:agent --url https://devlynna.igniastudio.mx --token <ADMIN_API_TOKEN> --models m1,m2`.
-  13 escenarios (incluye agendar y cancelar visitas; requieren horarios cargados con `demo:crm`).
+  16 escenarios (incluye base de conocimiento, agendar y cancelar visitas; requieren los datos de `demo:crm`).
 - **Pruebas**: Vitest usa un LLM "de guion"; el E2E usa `AI_MODEL=fake` (determinista, solo `ENVIRONMENT=local`, sin red).
 - `pnpm dev` usa Workers AI real (gasta neuronas de la cuenta de Ignia). `wrangler dev` se cae a veces al recargar
   en caliente con la conexión remota de IA: si pasa, reinícialo.

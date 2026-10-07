@@ -453,3 +453,31 @@ export const appointments = sqliteTable(
     index("appointments_prospect_idx").on(t.prospectId),
   ],
 );
+
+// ── Base de conocimiento ──────────────────────────────────────────────────────
+// Textos aprobados por la desarrolladora que la IA puede citar (servicios, proceso de compra, requisitos,
+// formas de pago aceptadas…). La búsqueda usa el índice de texto completo `kb_fts` (FTS5, ver migración 0007).
+
+export const KB_CATEGORIES = ["desarrollo", "compra", "pagos", "construccion", "oficina", "general"] as const;
+
+export const kbArticles = sqliteTable(
+  "kb_articles",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    // null = aplica a toda la desarrolladora
+    developmentId: text("development_id").references(() => developments.id),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    // Cómo lo preguntan los prospectos ("luz, electricidad, CFE"): mejora la búsqueda.
+    keywords: text("keywords"),
+    category: text("category", { enum: KB_CATEGORIES }).notNull().default("general"),
+    // Solo lo aprobado lo ve la IA.
+    status: text("status", { enum: ["draft", "approved"] }).notNull().default("draft"),
+    approvedByUserId: text("approved_by_user_id").references(() => users.id),
+    approvedAt: integer("approved_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("kb_tenant_status_idx").on(t.tenantId, t.status)],
+);

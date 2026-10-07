@@ -141,6 +141,7 @@ const P = [
 
 const sql = [];
 sql.push(
+  "DELETE FROM kb_articles WHERE id LIKE 'demo-kb-%'",
   "DELETE FROM appointments WHERE prospect_id LIKE 'demo-p-%'",
   `DELETE FROM availability_rules WHERE user_id IN (${user(MIGUEL)}, ${user(ANA)})`,
   "DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE prospect_id LIKE 'demo-p-%')",
@@ -240,10 +241,43 @@ for (const [n, email, day, hour, status, source] of APPOINTMENTS) {
     ${start}, ${start + H}, ${q(status)}, ${q(source)}, ${NOW - 2 * 24 * H}, ${NOW - 2 * 24 * H})`);
 }
 
+// ── Base de conocimiento: textos de EJEMPLO (la desarrolladora debe reemplazarlos por los suyos) ──────
+// [categoría, título, texto, palabras clave, aprobado]
+const KB = [
+  ["desarrollo", "¿Qué servicios tiene el terreno?",
+    "Todos los lotes de Residencial Los Almendros se entregan con toma de agua potable, conexión a la red eléctrica (CFE), drenaje y calles pavimentadas con alumbrado público. El internet lo contrata cada propietario con el proveedor de su preferencia.",
+    "agua, luz, electricidad, CFE, drenaje, internet, calles, pavimento, alumbrado", true],
+  ["desarrollo", "¿El fraccionamiento tiene seguridad y amenidades?",
+    "Cuenta con acceso controlado con caseta, barda perimetral, parque central, área de juegos y ciclovía. Las amenidades se entregan conforme al avance de obra; un asesor te confirma el calendario.",
+    "seguridad, vigilancia, caseta, acceso, barda, amenidades, parque, juegos, ciclovía", true],
+  ["pagos", "¿Qué formas de pago aceptan?",
+    "Los pagos se hacen únicamente por transferencia o depósito a las cuentas a nombre de Desarrolladora Demo; nunca a cuentas personales. No se reciben pagos en efectivo. Para tu seguridad, confirma siempre los datos bancarios con tu asesor.",
+    "efectivo, tarjeta, transferencia, depósito, cuenta, banco, datos bancarios", true],
+  ["compra", "¿Cómo es el proceso de compra?",
+    "1) Eliges tu lote y tu plan de pago con un asesor. 2) Apartas el lote con el monto que indica tu plan. 3) Firmas tu contrato de compraventa. 4) Pagas tu enganche y tus mensualidades según el plan. Un asesor te acompaña en cada paso.",
+    "proceso, pasos, comprar, contrato, firma, enganche", true],
+  ["compra", "¿Qué documentos necesito para comprar?",
+    "Identificación oficial vigente, comprobante de domicilio reciente y tu constancia de situación fiscal (RFC). Tu asesor te los pedirá en persona o por un medio seguro; por favor no los envíes por este chat.",
+    "documentos, requisitos, INE, identificación, RFC, comprobante de domicilio", true],
+  ["construccion", "¿Cuándo puedo empezar a construir?",
+    "Puedes construir a partir de la entrega física de tu lote, respetando el reglamento de construcción del desarrollo (alturas, restricciones y fachadas). El reglamento completo te lo comparte tu asesor.",
+    "construir, construcción, obra, casa, reglamento, permisos, fachada", true],
+  ["oficina", "¿Dónde está y en qué horario atiende la oficina de ventas?",
+    "Nuestra oficina de ventas está en la caseta de acceso de Residencial Los Almendros, en Mérida, Yucatán. Atendemos de lunes a viernes de 9:00 a 18:00 y sábados de 9:00 a 14:00. Para recorrer el desarrollo con un asesor, agenda tu visita.",
+    "oficina, horario, dirección, ubicación, caseta, atienden, abren", true],
+  ["general", "¿Se permiten mascotas?",
+    "Sí, con reglas de convivencia: las mascotas deben ir con correa en áreas comunes y sus dueños recoger sus desechos.",
+    "mascotas, perro, gato", false],
+];
+KB.forEach(([category, title, body, keywords, approved], i) => {
+  sql.push(`INSERT INTO kb_articles (id, tenant_id, title, body, keywords, category, status, approved_by_user_id, approved_at, created_at, updated_at)
+    VALUES (${q(`demo-kb-${i + 1}`)}, 'tnt-demo', ${q(title)}, ${q(body)}, ${q(keywords)}, ${q(category)}, ${q(approved ? "approved" : "draft")},
+    ${approved ? user(LAURA) : "NULL"}, ${approved ? NOW - 24 * H : "NULL"}, ${NOW - 2 * 24 * H}, ${NOW - 24 * H})`);
+});
+
 // Turno del reparto coherente con los datos (el siguiente en recibir será quien menos tiene recientes).
 sql.push(`UPDATE users SET last_assigned_at = ${NOW - 30 * MIN} WHERE email = ${q(MIGUEL)}`);
 sql.push(`UPDATE users SET last_assigned_at = ${NOW - 45 * MIN} WHERE email = ${q(ANA)}`);
-void LAURA;
 
 const apiDir = path.resolve(import.meta.dirname, "..");
 const remote = a.target !== "local";
@@ -263,4 +297,4 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
-console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial, avisos, horarios y citas.`);
+console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial, avisos, horarios, citas y base de conocimiento.`);

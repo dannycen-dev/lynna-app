@@ -30,6 +30,7 @@ import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
 import { prospectScope } from "../crm/assignment";
 import { agenda } from "./agenda";
+import { knowledge } from "./knowledge";
 import { crm } from "./crm";
 import { simulatorHistory, simulatorReset, simulatorSend } from "./simulator";
 
@@ -403,6 +404,7 @@ admin.get("/tenants/:tenant/conversations/:conversationId/messages", async (c) =
 
 admin.route("/tenants/:tenant", crm);
 admin.route("/tenants/:tenant", agenda);
+admin.route("/tenants/:tenant", knowledge);
 
 // ── Agente de IA: simulador de WhatsApp ──────────────────────────────────────────
 

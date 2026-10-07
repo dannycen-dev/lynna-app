@@ -315,3 +315,21 @@ export type SimulatorHistory = {
   audit: AiAudit[];
   prospect: (Prospect & { email: string | null }) | null;
 };
+
+export type KbCategory = "desarrollo" | "compra" | "pagos" | "construccion" | "oficina" | "general";
+
+export type KbArticle = {
+  id: string;
+  developmentId: string | null;
+  developmentName: string | null;
+  title: string;
+  body: string;
+  keywords: string | null;
+  category: KbCategory;
+  status: "draft" | "approved";
+  approvedByName: string | null;
+  approvedAt: number | null;
+  updatedAt: number;
+};
+
+export type KbSearch = { query: string | null; hits: { id: string; title: string; body: string; category: KbCategory }[] };

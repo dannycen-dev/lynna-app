@@ -7,6 +7,7 @@ import { Empty, Spinner } from "./components/ui";
 import { Agenda } from "./pages/Agenda";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
 import { Configuracion } from "./pages/Configuracion";
+import { Conocimiento } from "./pages/Conocimiento";
 import { Home } from "./pages/Home";
 import { InventarioDevelopment, InventarioList } from "./pages/Inventario";
 import { Login } from "./pages/Login";
@@ -69,6 +70,7 @@ const router = createBrowserRouter([
       { path: "prospectos/:id", element: <ProspectoFicha /> },
       { path: "agente", element: <Simulador /> },
       { path: "citas", element: <Agenda /> },
+      { path: "conocimiento", element: <Conocimiento /> },
       { path: "ajustes", element: <Configuracion /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],

@@ -88,6 +88,10 @@ export const TOOL_LABEL: Record<string, string> = {
   simular_plan: "Simuló un plan",
   actualizar_prospecto: "Guardó datos del prospecto",
   escalar_a_asesor: "Turnó a un asesor",
+  horarios_disponibles: "Consultó horarios de visita",
+  agendar_visita: "Agendó una visita",
+  cancelar_cita: "Canceló la visita",
+  consultar_informacion: "Consultó la base de conocimiento",
 };
 
 /** Calificación por puntaje (misma regla que la API: agent/qualification.ts). */
@@ -115,6 +119,11 @@ export const HISTORY_LABEL: Record<string, string> = {
   appointment_completed: "Asistió a la cita",
   appointment_no_show: "No asistió a la cita",
   appointment_cancelled: "Canceló la cita",
+  created: "Creó el texto",
+  updated: "Editó el texto",
+  approved: "Aprobó el texto",
+  unapproved: "Pasó a borrador",
+  deleted: "Eliminó el texto",
 };
 
 export const APPOINTMENT_STATUS_LABEL: Record<string, string> = {

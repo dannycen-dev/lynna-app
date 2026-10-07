@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Bot,
   Building2,
   CalendarCheck,
@@ -28,6 +29,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: "/cotizador", label: "Cotizador", icon: <Calculator size={18} /> },
       { to: "/prospectos", label: "Prospectos", icon: <Users size={18} /> },
       { to: "/agente", label: "Agente de IA", icon: <Bot size={18} /> },
+      { to: "/conocimiento", label: "Base de conocimiento", icon: <BookOpen size={18} /> },
       { to: "/conversaciones", label: "WhatsApp", icon: <MessageCircle size={18} />, soon: true },
       { to: "/citas", label: "Citas", icon: <CalendarCheck size={18} /> },
     ],

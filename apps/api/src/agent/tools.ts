@@ -8,6 +8,8 @@ import { todayIn, type Breakdown } from "../financing";
 
 type PaymentPlan = typeof paymentPlans.$inferSelect;
 import { auditInsert } from "../lib/audit";
+import { searchKnowledge } from "../knowledge/search";
+import { extractAmounts, extractTimes } from "./guard";
 import type { ToolSpec } from "./llm";
 import { computeScore } from "./qualification";
 
@@ -192,6 +194,16 @@ export const TOOL_SPECS: ToolSpec[] = [
     name: "cancelar_cita",
     description: "Cancela la visita agendada del prospecto cuando él lo pide. Llámala SIEMPRE antes de decirle que su visita quedó cancelada.",
     parameters: { type: "object", properties: { motivo: { type: "string" } } },
+  },
+  {
+    name: "consultar_informacion",
+    description:
+      "Busca en la información aprobada por la desarrolladora: servicios del terreno (agua, luz, drenaje), proceso de compra, requisitos, formas de pago aceptadas, reglamento de construcción, oficina de ventas y otras dudas generales. Úsala para preguntas que no sean de lotes, precios, planes o visitas. Responde SOLO con lo que devuelva.",
+    parameters: {
+      type: "object",
+      properties: { pregunta: { type: "string", description: "La duda del prospecto, con sus palabras." } },
+      required: ["pregunta"],
+    },
   },
   {
     name: "escalar_a_asesor",
@@ -463,6 +475,27 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
       });
       facts.cancelled = true;
       return { ok: true, mensaje: "Cita cancelada. Ofrece reagendar cuando quiera." };
+    }
+
+    case "consultar_informacion": {
+      const question = str(args.pregunta) ?? "";
+      const [prospect] = await db.select({ dev: prospects.interestDevelopmentId }).from(prospects).where(eq(prospects.id, ctx.prospectId));
+      const hits = await searchKnowledge(db, tenantId, question, { approvedOnly: true, limit: 3, developmentId: prospect?.dev ?? null });
+      if (hits.length === 0) {
+        return { articulos: [], mensaje: "No hay información aprobada sobre eso. No la inventes: ofrece que un asesor le confirme." };
+      }
+      // Lo que dice un texto aprobado se puede repetir: sus montos, horas y fechas cuentan como verificados.
+      for (const h of hits) {
+        for (const amount of extractAmounts(h.body)) facts.amounts.add(amount);
+        for (const time of extractTimes(h.body)) facts.times.add(time);
+        for (const m of norm(h.body).matchAll(/\b(\d{1,2}) de (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/g)) {
+          facts.dates.add(`${m[1]} de ${m[2]}`);
+        }
+      }
+      return {
+        articulos: hits.map((h) => ({ titulo: h.title, contenido: h.body })),
+        nota: "Responde solo con esta información, con tus palabras y sin agregar datos. Si no contesta exactamente la duda, dilo y ofrece que un asesor confirme.",
+      };
     }
 
     case "escalar_a_asesor": {

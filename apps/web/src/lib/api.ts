@@ -4,6 +4,8 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  KbArticle,
+  KbSearch,
   AgendaItem,
   Availability,
   AvailabilityRule,
@@ -357,5 +359,34 @@ export function useSaveAppointmentSettings() {
   return useMutation({
     mutationFn: (data: { appointmentMinutes: number }) => call("/settings/appointments", { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => invalidate("availability", "slots"),
+  });
+}
+
+// ── Base de conocimiento ───────────────────────────────────────────────────────
+
+export const useKnowledge = () => useApiQuery<KbArticle[]>(["knowledge"], "/knowledge");
+export const useKnowledgeSearch = (q: string) =>
+  useApiQuery<KbSearch>(["knowledge-search", q], q.trim().length >= 3 ? `/knowledge/search?${new URLSearchParams({ q })}` : null);
+
+type KbInput = Pick<KbArticle, "title" | "body" | "keywords" | "category" | "developmentId" | "status">;
+
+export function useSaveArticle() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, ...data }: Partial<KbInput> & { id?: string }) =>
+      id
+        ? call<KbArticle>(`/knowledge/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(data) })
+        : call<KbArticle>("/knowledge", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("knowledge", "knowledge-search"),
+  });
+}
+
+export function useDeleteArticle() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (id: string) => call<void>(`/knowledge/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSuccess: () => invalidate("knowledge", "knowledge-search"),
   });
 }

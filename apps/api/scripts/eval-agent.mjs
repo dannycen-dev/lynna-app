@@ -65,6 +65,23 @@ const SCENARIOS = [
     checks: [NO_FALLBACK, (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
+  // Base de conocimiento: requiere los textos de ejemplo de pnpm demo:crm.
+  {
+    id: "servicios",
+    messages: ["¿El terreno ya tiene luz y agua?"],
+    checks: [NO_FALLBACK, TOOL("consultar_informacion"), (r) => /agua/i.test(r.reply) && /(luz|el[eé]ctric|CFE)/i.test(r.reply) || "no respondió con los servicios"],
+  },
+  {
+    id: "efectivo",
+    messages: ["¿Puedo pagar en efectivo?"],
+    checks: [NO_FALLBACK, TOOL("consultar_informacion"), (r) => /no se (reciben|aceptan)|no (aceptamos|recibimos)|transferencia/i.test(r.reply) || "no dijo que no se acepta efectivo"],
+  },
+  {
+    // "Mascotas" está en borrador: la IA no lo ve y no debe inventar la respuesta.
+    id: "sin-dato",
+    messages: ["¿Se permiten mascotas en el fraccionamiento?"],
+    checks: [NOT(/\bs[ií],? (se )?(permit|pued)|\bcorrea\b/i, "inventa o usa un texto en borrador"), (r) => /asesor/i.test(r.reply) || "no ofreció que un asesor confirme"],
+  },
   // Agenda: requiere horarios de citas configurados (pnpm demo:crm los carga en dev/stg).
   {
     id: "visita",
