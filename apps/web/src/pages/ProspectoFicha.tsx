@@ -8,6 +8,7 @@ import {
   useBookAppointment,
   useChangeStage,
   useDeleteProspect,
+  usePauseFollowups,
   useProspect,
   useProspectExportUrl,
   useSendHumanMessage,
@@ -122,6 +123,10 @@ export function ProspectoFicha() {
                 <dd>{prospect.timeframe ? TIMEFRAME_LABEL[prospect.timeframe] : "—"}</dd>
                 <dt>Primer contacto</dt>
                 <dd>{dateTime(prospect.createdAt)}</dd>
+                <dt>Seguimientos</dt>
+                <dd>
+                  <Followups prospectId={prospect.id} status={detail.data.followup} paused={Boolean(prospect.followupsPausedAt)} />
+                </dd>
               </dl>
             </div>
           </div>
@@ -247,7 +252,8 @@ function Conversation(props: { conversationId: string; aiPaused: boolean; takenB
       <div className="sim__messages chat">
         {props.messages.map((m) => (
           <div key={m.id} className={`bubble bubble--${m.direction === "in" ? "in" : "out"}${m.author === "user" ? " bubble--human" : ""}`}>
-            {m.type !== "text" && <em className="muted">[{m.type === "image" ? "imagen" : "archivo"}] </em>}
+            {m.type === "template" && <em className="muted">Seguimiento automático · </em>}
+            {m.type !== "text" && m.type !== "template" && <em className="muted">[{m.type === "image" ? "imagen" : "archivo"}] </em>}
             {m.body}
             <span className="bubble__meta">
               {m.direction === "out" && `${AUTHOR_LABEL[m.author]} · `}
@@ -374,6 +380,25 @@ function BookDialog({ prospectId, rescheduling, onClose }: { prospectId: string;
         </div>
       </div>
     </Dialog>
+  );
+}
+
+function Followups({ prospectId, status, paused }: { prospectId: string; status: ProspectDetail["followup"]; paused: boolean }) {
+  const pause = usePauseFollowups();
+  if (status.state === "disabled") return <span className="muted">Desactivados</span>;
+  const text =
+    status.state === "waiting"
+      ? `Paso ${status.step + 1} de ${status.total}: ${dateTime(status.nextAt)}`
+      : status.state === "done"
+        ? `Terminados (${status.total} de ${status.total})`
+        : status.reason;
+  return (
+    <span className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+      <span className={status.state === "stopped" ? "muted" : undefined}>{text}</span>
+      <button className="btn btn--sm btn--ghost" disabled={pause.isPending} onClick={() => pause.mutate({ id: prospectId, paused: !paused })}>
+        {paused ? "Reanudar seguimientos" : "Pausar seguimientos"}
+      </button>
+    </span>
   );
 }
 

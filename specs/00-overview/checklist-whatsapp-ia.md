@@ -296,7 +296,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] CRM, mejoras: el tablero carga hasta 500 prospectos (avisa si hay más); paginar/virtualizar cuando el volumen real lo pida. Tiempo de atención de asesores en horas hábiles (hoy cuenta noches y fines de semana).
 - [x] **Usuarios desde el panel**: alta con contraseña temporal (se muestra una vez; el servidor bloquea la API hasta cambiarla), roles (dueño administra todo; gerente solo vendedores), desactivar/reactivar (cierra sesiones y avisa cuántos prospectos tenía), restablecer contraseña y "Mi cuenta" para cambiar la propia. Siempre queda un dueño activo; nadie se desactiva a sí mismo. — _2026-10-07, dev_
 - [x] **Apartado vencido**: avisos 24 h antes y al liberarse (§2.11). — _2026-10-07, dev_
-- [ ] **Seguimientos automáticos** (§2.7): secuencias con Workflows; el envío real depende de WhatsApp.
+- [x] **Seguimientos automáticos** (§2.7): secuencia configurable (hasta 5 pasos, espera y texto con {nombre}/{desarrollo}); se detiene si responde (y reinicia después), agenda cita, pide baja, se turna, un asesor la toma, la pausan o ya apartó/compró/perdió; solo en horario de oficina. Cron cada 15 min en lugar de Workflows (más simple, mismo resultado). — _2026-10-07, dev; el envío real (plantilla de marketing de Meta) llega con WhatsApp: hoy quedan "simulados" en la conversación_
 - [ ] Avisos en tiempo real (Durable Object + WebSocket) en lugar de consulta cada 10 s.
 - [ ] Agenda, mejoras: varios horarios por día por vendedor, días festivos/bloqueos (vacaciones), sincronizar con Google Calendar.
 

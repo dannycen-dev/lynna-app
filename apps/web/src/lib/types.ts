@@ -210,6 +210,7 @@ export type ProspectDetail = {
     consentDeniedAt: number | null;
     consentText: string | null;
     pendingFinancial: { budgetCents?: number; downPaymentCents?: number } | null;
+    followupsPausedAt: number | null;
   };
   conversation: { id: string; aiPaused: boolean; takenByUserId: string | null; takenByName: string | null; takenAt: number | null; lastInboundAt: number | null } | null;
   messages: Message[];
@@ -217,6 +218,7 @@ export type ProspectDetail = {
   history: HistoryItem[];
   lastAi: AiAudit | null;
   appointments: (Appointment & { sellerName: string; label: string })[];
+  followup: FollowupStatus;
 };
 
 export type AppointmentStatus = "scheduled" | "completed" | "no_show" | "cancelled";
@@ -383,3 +385,11 @@ export type ManagedUser = {
   createdAt: number;
 };
 export type UsersResponse = { users: ManagedUser[]; manageableRoles: UserRole[]; me: string | null };
+
+export type FollowupStep = { afterHours: number; text: string };
+export type FollowupSettings = { enabled: boolean; steps: FollowupStep[] };
+export type FollowupStatus =
+  | { state: "disabled" }
+  | { state: "stopped"; reason: string }
+  | { state: "done"; step: number; total: number }
+  | { state: "waiting"; step: number; total: number; nextAt: number };

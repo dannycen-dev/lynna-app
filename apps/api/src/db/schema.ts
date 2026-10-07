@@ -24,6 +24,9 @@ const tenantId = () =>
     .notNull()
     .references(() => tenants.id);
 
+/** Un paso de la secuencia de seguimiento: cuántas horas de silencio esperar y qué decir. */
+export type FollowupStep = { afterHours: number; text: string };
+
 /** Horario de atención de los asesores: tramos por día (0 = domingo), en minutos desde la medianoche. */
 export type BusinessHours = { weekday: number; startMinute: number; endMinute: number }[];
 
@@ -42,6 +45,9 @@ export const tenants = sqliteTable("tenants", {
   // le dice al prospecto cuándo lo contactará un asesor ("mañana a partir de las 9:00") en lugar de "en breve".
   assistantName: text("assistant_name").notNull().default("Lynna"),
   businessHours: text("business_hours", { mode: "json" }).$type<BusinessHours>(),
+  // Seguimientos automáticos a prospectos que dejan de responder (ver crm/followups.ts).
+  followupsEnabled: integer("followups_enabled", { mode: "boolean" }).notNull().default(false),
+  followupSteps: text("followup_steps", { mode: "json" }).$type<FollowupStep[]>(),
   // Privacidad (LFPDPPP): enlace al aviso de privacidad y texto corto que se manda en el primer mensaje.
   privacyNoticeUrl: text("privacy_notice_url"),
   privacyNoticeText: text("privacy_notice_text"),
@@ -217,6 +223,10 @@ export const prospects = sqliteTable(
     consentText: text("consent_text"), // lo que respondió el prospecto (evidencia)
     pendingFinancial: text("pending_financial", { mode: "json" }).$type<{ budgetCents?: number; downPaymentCents?: number }>(),
     optedOutAt: integer("opted_out_at"),
+    // Seguimientos: en qué paso va, cuándo se mandó el último y si un humano los pausó para este prospecto.
+    followupStep: integer("followup_step").notNull().default(0),
+    followupLastAt: integer("followup_last_at"),
+    followupsPausedAt: integer("followups_paused_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

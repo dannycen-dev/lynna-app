@@ -5,6 +5,7 @@ import { canSendWhatsApp } from "../agent/respond";
 import { actorOf, type AuthVariables, type Principal } from "../auth/middleware";
 import { slotLabel } from "../crm/agenda";
 import { advisorEta } from "../crm/business-hours";
+import { DEFAULT_FOLLOWUP_STEPS, followupStatus } from "../crm/followups";
 import { computeMetrics } from "../crm/metrics";
 import { listProspects, prospectFilters } from "../crm/prospect-list";
 import { toCsv } from "../lib/csv";
@@ -117,6 +118,12 @@ crm.get("/prospects/:id", async (c) => {
     })),
     lastAi: lastAi ?? null,
     appointments: appts.map((a) => ({ ...a.appointment, sellerName: a.sellerName, label: slotLabel(a.appointment.startsAt, c.var.tenant.timezone) })),
+    followup: followupStatus(
+      c.var.tenant,
+      prospect,
+      conversation ? { aiPaused: conversation.conversation.aiPaused, lastInboundAt: conversation.conversation.lastInboundAt } : null,
+      appts.some((a) => a.appointment.status === "scheduled" && a.appointment.endsAt >= Date.now()),
+    ),
   });
 });
 
@@ -604,4 +611,49 @@ crm.get("/metrics", async (c) => {
   const days = Number(c.req.query("days") ?? 30);
   if (![7, 30, 90].includes(days)) return c.json({ error: "validation", message: "days debe ser 7, 30 o 90." }, 400);
   return c.json(await computeMetrics(getDb(c.env.DB), c.var.tenant, c.var.principal, days));
+});
+
+// ── Seguimientos automáticos ───────────────────────────────────────────────────
+
+crm.get("/settings/followups", (c) =>
+  c.json({ enabled: c.var.tenant.followupsEnabled, steps: c.var.tenant.followupSteps?.length ? c.var.tenant.followupSteps : DEFAULT_FOLLOWUP_STEPS }),
+);
+
+crm.patch("/settings/followups", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente o dueño puede cambiar esto." }, 403);
+  const step = z.object({ afterHours: z.int().min(1).max(30 * 24), text: z.string().trim().min(10).max(600) });
+  const parsed = await readBody(
+    c,
+    z.object({
+      enabled: z.boolean().optional(),
+      steps: z
+        .array(step)
+        .min(1)
+        .max(5)
+        .optional(),
+    }),
+  );
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const data = { ...(parsed.data.enabled !== undefined ? { followupsEnabled: parsed.data.enabled } : {}), ...(parsed.data.steps ? { followupSteps: parsed.data.steps } : {}) };
+  const db = getDb(c.env.DB);
+  const [updated] = await db.batch([
+    db.update(tenants).set(data).where(eq(tenants.id, c.var.tenant.id)).returning(),
+    auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "tenant", entityId: c.var.tenant.id, action: "followup_settings", data: parsed.data }),
+  ]);
+  const t = updated[0]!;
+  return c.json({ enabled: t.followupsEnabled, steps: t.followupSteps?.length ? t.followupSteps : DEFAULT_FOLLOWUP_STEPS });
+});
+
+/** Pausar o reanudar los seguimientos de un prospecto (el vendedor también puede, en los suyos). */
+crm.patch("/prospects/:id/followups", async (c) => {
+  const parsed = await readBody(c, z.object({ paused: z.boolean() }));
+  if (!parsed.success) return c.json({ error: "validation" }, 400);
+  const db = getDb(c.env.DB);
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
+  if (!prospect) return c.json({ error: "not_found" }, 404);
+  await db.batch([
+    db.update(prospects).set({ followupsPausedAt: parsed.data.paused ? Date.now() : null }).where(eq(prospects.id, prospect.id)),
+    auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "prospect", entityId: prospect.id, action: parsed.data.paused ? "followups_paused" : "followups_resumed" }),
+  ]);
+  return c.body(null, 204);
 });

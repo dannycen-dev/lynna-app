@@ -5,6 +5,7 @@ import { schemaStatus } from "./db/schema-version";
 import { log } from "./lib/log";
 import { purgeExpiredSessions } from "./auth/session";
 import { remindSellers } from "./crm/agenda";
+import { processFollowups } from "./crm/followups";
 import { reassignStale } from "./crm/assignment";
 import { admin } from "./routes/admin";
 import { auth } from "./routes/auth";
@@ -46,6 +47,8 @@ export default {
     if (warned > 0) log("info", "cron.reservations_warned", { count: warned });
     const reassigned = await reassignStale(db);
     if (reassigned.length > 0) log("info", "cron.prospects_reassigned", { count: reassigned.length });
+    const followups = await processFollowups(db);
+    if (followups > 0) log("info", "cron.followups_sent", { count: followups });
     const reminded = await remindSellers(db);
     if (reminded > 0) log("info", "cron.appointment_reminders", { count: reminded });
     await purgeExpiredSessions(db);

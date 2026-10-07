@@ -4,6 +4,7 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  FollowupSettings,
   ManagedUser,
   UsersResponse,
   Metrics,
@@ -511,5 +512,28 @@ export function useResetPassword() {
   const { call } = useApi();
   return useMutation({
     mutationFn: (id: string) => call<{ temporaryPassword: string }>(`/users/${encodeURIComponent(id)}/reset-password`, { method: "POST" }),
+  });
+}
+
+// ── Seguimientos automáticos ───────────────────────────────────────────────────
+
+export const useFollowupSettings = () => useApiQuery<FollowupSettings>(["followup-settings"], "/settings/followups");
+
+export function useSaveFollowupSettings() {
+  const { call, tenant } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<FollowupSettings>) => call<FollowupSettings>("/settings/followups", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (saved) => qc.setQueryData([tenant, "followup-settings"], saved),
+  });
+}
+
+export function usePauseFollowups() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, paused }: { id: string; paused: boolean }) =>
+      call(`/prospects/${encodeURIComponent(id)}/followups`, { method: "PATCH", body: JSON.stringify({ paused }) }),
+    onSuccess: () => invalidate("prospect"),
   });
 }

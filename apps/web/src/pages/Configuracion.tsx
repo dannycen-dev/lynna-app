@@ -1,9 +1,11 @@
-import { Bot, CalendarClock, ShieldCheck, Shuffle, Users } from "lucide-react";
+import { Bot, CalendarClock, MessageSquareReply, Plus, ShieldCheck, Shuffle, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import {
   useAssignmentSettings,
   useAgentSettings,
+  useFollowupSettings,
+  useSaveFollowupSettings,
   useAvailability,
   useSaveAgentSettings,
   usePrivacySettings,
@@ -16,7 +18,7 @@ import {
 } from "../lib/api";
 import { ROLE_LABEL, timeAgo } from "../lib/format";
 import { useWeekHours, WeekHoursGrid } from "../components/WeekHours";
-import type { AvailabilityRule } from "../lib/types";
+import type { AvailabilityRule, FollowupStep } from "../lib/types";
 import { useSession } from "../lib/session";
 
 export function Configuracion() {
@@ -27,6 +29,7 @@ export function Configuracion() {
       {!canWrite && <div className="alert alert--info" style={{ marginBottom: 16 }}>Solo un gerente o dueño puede cambiar el reparto. Tu horario de citas sí lo puedes ajustar.</div>}
       <div className="stack">
         <AgentCard disabled={!canWrite} />
+        <FollowupsCard disabled={!canWrite} />
         <AssignmentCard disabled={!canWrite} />
         <TeamCard disabled={!canWrite} />
         <AvailabilityCard canWrite={canWrite} />
@@ -337,6 +340,93 @@ function AgentCard({ disabled }: { disabled: boolean }) {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn--primary" type="submit" disabled={disabled || save.isPending || hours.invalid || name.trim().length < 2}>
+            Guardar
+          </button>
+          {saved && <span className="muted">Guardado</span>}
+        </div>
+        <ErrorAlert error={save.error ?? settings.error} />
+      </form>
+    </div>
+  );
+}
+
+const WAIT_OPTIONS = [4, 12, 24, 48, 72, 120, 168, 336];
+const waitLabel = (h: number) => (h < 24 ? `${h} horas` : h === 24 ? "1 día" : `${h / 24} días`);
+
+function FollowupsCard({ disabled }: { disabled: boolean }) {
+  const settings = useFollowupSettings();
+  const save = useSaveFollowupSettings();
+  const [enabled, setEnabled] = useState(false);
+  const [steps, setSteps] = useState<FollowupStep[]>([]);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (settings.data) {
+      setEnabled(settings.data.enabled);
+      setSteps(settings.data.steps);
+    }
+  }, [settings.data]);
+  if (settings.isPending) return <Spinner />;
+  const setStep = (i: number, patch: Partial<FollowupStep>) => {
+    setSaved(false);
+    setSteps((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  };
+  const valid = steps.length > 0 && steps.every((s) => s.text.trim().length >= 10);
+  return (
+    <div className="card">
+      <div className="card__header">
+        <MessageSquareReply size={16} /> Seguimientos automáticos
+      </div>
+      <form
+        className="card__body stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          save.mutate({ enabled, steps: steps.map((s) => ({ ...s, text: s.text.trim() })) }, { onSuccess: () => setSaved(true) });
+        }}
+      >
+        <label className="row" style={{ gap: 8 }}>
+          <input type="checkbox" checked={enabled} disabled={disabled} onChange={(e) => (setEnabled(e.target.checked), setSaved(false))} />
+          <strong>Escribir a los prospectos que dejan de responder</strong>
+        </label>
+        <p className="muted" style={{ margin: 0 }}>
+          Se detienen solos si el prospecto responde (y vuelven a empezar si después se queda callado), agenda cita, pide baja, se turna a un asesor o ya apartó. Solo se
+          envían en horario de oficina. Usa <code>{"{nombre}"}</code> y <code>{"{desarrollo}"}</code> en el texto.
+        </p>
+        <div className="alert alert--info">
+          Por ahora quedan como <strong>simulados</strong> en la conversación: fuera de las 24 h WhatsApp exige plantillas aprobadas por Meta, que se conectan en la fase de WhatsApp. Cada
+          seguimiento será una plantilla de marketing (≈ $0.73 MXN en México, lo paga la desarrolladora a Meta).
+        </div>
+        {steps.map((s, i) => (
+          <section key={i} className="note stack" style={{ gap: 8 }} aria-label={`Seguimiento ${i + 1}`}>
+            <div className="row" style={{ gap: 8, justifyContent: "space-between" }}>
+              <label className="row" style={{ gap: 8 }}>
+                <strong>Seguimiento {i + 1}</strong>
+                <span className="muted">{i === 0 ? "tras" : "otros"}</span>
+                <select className="select" style={{ width: 130, height: 32 }} value={s.afterHours} disabled={disabled} onChange={(e) => setStep(i, { afterHours: Number(e.target.value) })} aria-label={`Espera del seguimiento ${i + 1}`}>
+                  {[...new Set([...WAIT_OPTIONS, s.afterHours])].sort((a, b) => a - b).map((h) => (
+                    <option key={h} value={h}>
+                      {waitLabel(h)}
+                    </option>
+                  ))}
+                </select>
+                <span className="muted">sin respuesta</span>
+              </label>
+              {steps.length > 1 && (
+                <button type="button" className="btn btn--sm btn--ghost" disabled={disabled} onClick={() => (setSteps(steps.filter((_, j) => j !== i)), setSaved(false))} aria-label={`Quitar seguimiento ${i + 1}`}>
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+            <textarea className="textarea" style={{ minHeight: 70 }} maxLength={600} value={s.text} disabled={disabled} onChange={(e) => setStep(i, { text: e.target.value })} aria-label={`Texto del seguimiento ${i + 1}`} />
+          </section>
+        ))}
+        <div className="row" style={{ gap: 8 }}>
+          {steps.length < 5 && (
+            <button type="button" className="btn btn--sm" disabled={disabled} onClick={() => (setSteps([...steps, { afterHours: 72, text: "" }]), setSaved(false))}>
+              <Plus size={14} /> Agregar seguimiento
+            </button>
+          )}
+          <button className="btn btn--primary" type="submit" disabled={disabled || save.isPending || !valid}>
             Guardar
           </button>
           {saved && <span className="muted">Guardado</span>}
