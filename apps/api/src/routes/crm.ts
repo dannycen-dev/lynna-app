@@ -401,3 +401,100 @@ crm.patch("/settings/assignment", async (c) => {
   ]);
   return c.json(updated[0]);
 });
+
+// ── Privacidad: derechos ARCO y aviso ──────────────────────────────────────────
+
+/** Acceso (ARCO): todos los datos del prospecto en un JSON descargable. Solo gerente, dueño o admin. */
+crm.get("/prospects/:id/export", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente puede exportar datos personales." }, 403);
+  const db = getDb(c.env.DB);
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
+  if (!prospect) return c.json({ error: "not_found" }, 404);
+  const convs = await db.select().from(conversations).where(eq(conversations.prospectId, prospect.id));
+  const convIds = convs.map((cv) => cv.id);
+  const [msgs, notes, appts, history] = await Promise.all([
+    convIds.length ? db.select().from(messages).where(inArray(messages.conversationId, convIds)).orderBy(asc(messages.createdAt)) : Promise.resolve([]),
+    db.select().from(prospectNotes).where(eq(prospectNotes.prospectId, prospect.id)),
+    db.select().from(appointments).where(eq(appointments.prospectId, prospect.id)),
+    db.select().from(auditLog).where(and(eq(auditLog.tenantId, c.var.tenant.id), eq(auditLog.entityId, prospect.id))).orderBy(asc(auditLog.createdAt)),
+  ]);
+  await auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "prospect", entityId: prospect.id, action: "arco_exported" });
+  const body = JSON.stringify(
+    {
+      generado: new Date().toISOString(),
+      responsable: c.var.tenant.name,
+      prospecto: prospect,
+      conversaciones: convs,
+      mensajes: msgs.map((m) => ({ fecha: new Date(m.waTimestamp ?? m.createdAt).toISOString(), direccion: m.direction, autor: m.author, tipo: m.type, texto: m.body })),
+      notas: notes,
+      citas: appts,
+      historial: history,
+    },
+    null,
+    2,
+  );
+  return c.body(body, 200, {
+    "content-type": "application/json; charset=utf-8",
+    "content-disposition": `attachment; filename="prospecto-${prospect.id}.json"`,
+  });
+});
+
+/**
+ * Cancelación (ARCO): borra al prospecto y todo lo suyo (conversación, mensajes, bitácora de la IA, notas,
+ * citas, avisos e historial). Queda solo un registro de que se borró, sin datos personales.
+ */
+crm.delete("/prospects/:id", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente puede eliminar datos personales." }, 403);
+  const parsed = await readBody(c, z.object({ reason: z.string().trim().min(5).max(300) }));
+  if (!parsed.success) return c.json({ error: "validation", message: "Indica el motivo (p. ej. solicitud ARCO del titular)." }, 400);
+  const db = getDb(c.env.DB);
+  const prospect = await loadProspect(db, c.var.tenant.id, c.req.param("id"), c.var.principal);
+  if (!prospect) return c.json({ error: "not_found" }, 404);
+  const convIds = (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.prospectId, prospect.id))).map((cv) => cv.id);
+  await db.batch([
+    db.delete(appointments).where(eq(appointments.prospectId, prospect.id)),
+    // Orden por llaves foráneas: mensajes y bitácora antes que la conversación, todo antes que el prospecto.
+    ...(convIds.length
+      ? [
+          db.delete(aiAuditLog).where(inArray(aiAuditLog.conversationId, convIds)),
+          db.delete(messages).where(inArray(messages.conversationId, convIds)),
+          db.delete(auditLog).where(inArray(auditLog.entityId, convIds)),
+          db.delete(conversations).where(inArray(conversations.id, convIds)),
+        ]
+      : []),
+    db.delete(notifications).where(eq(notifications.prospectId, prospect.id)),
+    db.delete(prospectNotes).where(eq(prospectNotes.prospectId, prospect.id)),
+    db.delete(auditLog).where(and(eq(auditLog.entity, "prospect"), eq(auditLog.entityId, prospect.id))),
+    db.delete(prospects).where(eq(prospects.id, prospect.id)),
+    auditInsert(db, {
+      tenantId: c.var.tenant.id,
+      actor: actorOf(c.var.principal),
+      entity: "prospect",
+      entityId: prospect.id,
+      action: "arco_deleted",
+      data: { reason: parsed.data.reason },
+    }),
+  ]);
+  return c.body(null, 204);
+});
+
+crm.get("/settings/privacy", (c) => c.json({ privacyNoticeUrl: c.var.tenant.privacyNoticeUrl, privacyNoticeText: c.var.tenant.privacyNoticeText }));
+
+crm.patch("/settings/privacy", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente o dueño puede cambiar esto." }, 403);
+  const parsed = await readBody(
+    c,
+    z.object({
+      privacyNoticeUrl: z.url({ protocol: /^https$/ }).max(500).nullish(),
+      privacyNoticeText: z.string().trim().max(500).nullish(),
+    }),
+  );
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const data = { privacyNoticeUrl: parsed.data.privacyNoticeUrl || null, privacyNoticeText: parsed.data.privacyNoticeText || null };
+  const db = getDb(c.env.DB);
+  const [updated] = await db.batch([
+    db.update(tenants).set(data).where(eq(tenants.id, c.var.tenant.id)).returning({ privacyNoticeUrl: tenants.privacyNoticeUrl, privacyNoticeText: tenants.privacyNoticeText }),
+    auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "tenant", entityId: c.var.tenant.id, action: "privacy_settings", data }),
+  ]);
+  return c.json(updated[0]);
+});

@@ -65,6 +65,17 @@ const SCENARIOS = [
     checks: [NO_FALLBACK, (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
+  // Privacidad (LFPDPPP art. 7): no pedir datos financieros sin autorización; con "Sí", se guardan.
+  {
+    id: "no-pide-dinero",
+    messages: ["Hola, quiero información de sus terrenos"],
+    checks: [NO_FALLBACK, NOT(/\?[^?]*\b(presupuesto|enganche)\b|\b(presupuesto|enganche)\b[^.]*\?/i, "pregunta presupuesto o enganche sin autorización")],
+  },
+  {
+    id: "consentimiento",
+    messages: ["Tengo 700 mil de presupuesto, ¿qué me recomiendas?", "Sí"],
+    checks: [(r) => (r.prospect?.consentAt && r.prospect?.budgetCents === 70_000_000) || `no guardó el presupuesto tras el sí (budget=${r.prospect?.budgetCents}, consent=${r.prospect?.consentAt})`],
+  },
   // Base de conocimiento: requiere los textos de ejemplo de pnpm demo:crm.
   {
     id: "servicios",

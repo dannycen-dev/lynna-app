@@ -288,6 +288,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 ### Pendientes sin WhatsApp (orden propuesto)
 - [x] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel. — _2026-10-07, dev; eval del agente 13/13 (incluye agendar y cancelar)_
 - [x] **Base de conocimiento** (§2.2): FAQ, requisitos, formas de pago — solo textos aprobados. — _2026-10-07, dev; eval 16/16. Faltan los textos REALES del cliente (hoy son de ejemplo)_
+- [x] **Privacidad (LFPDPPP)**: aviso en el primer mensaje, consentimiento para datos financieros, ARCO desde la ficha. — _2026-10-07, dev; validador además bloquea respuestas con JSON/jerga interna y "déjame consultar" (casos reales vistos con Gemma)_
 - [ ] Ajuste menor: cuando la red de seguridad ya turnó (p. ej. escrituras), la IA a veces pregunta "¿quieres que un asesor te contacte?" en lugar de afirmar que lo hará.
 - [ ] **Configuración por desarrolladora**: nombre del asistente, horario de atención, texto del aviso de privacidad, formas de pago.
 - [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
@@ -310,9 +311,10 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] Del cliente: inventario real (CSV), planes de pago, FAQ y textos legales, número de WhatsApp.
 - [ ] Propuesta comercial (§10) para el cliente. Hecho: análisis interno de costos, competencia (Adara, Manivela MV-Gaia, Leadsales, Kosmo, Aurora) y precios sugeridos en `propuestas/Lynna-costos-y-precios-2026-10.docx` (6-oct-2026). Falta: versión para el cliente.
 - [ ] **Privacidad (LFPDPPP, DOF 20-03-2025)** — detalle en `propuestas/Lynna-costos-y-precios-2026-10.docx`:
-  - [ ] Aviso de privacidad de la desarrolladora (menciona a Ignia, Cloudflare, Meta y el proveedor de IA), enlazado desde el primer mensaje de WhatsApp.
-  - [ ] Consentimiento expreso en WhatsApp **antes** de preguntar presupuesto, enganche o forma de pago (datos patrimoniales, art. 7).
-  - [ ] Contrato de encargo desarrolladora ↔ Ignia (datos, finalidad, plazo, borrado).
-  - [ ] ARCO desde el panel: exportar y borrar los datos de un prospecto (ya existe la baja / opt-out).
+  - [x] Aviso de privacidad enlazado desde el primer mensaje (lo agrega el sistema, no el modelo; enlace y texto en Configuración). — _2026-10-07, dev_
+  - [ ] Redactar el aviso de privacidad de la desarrolladora (debe mencionar a Ignia, Cloudflare, Meta y el proveedor de IA) y poner su enlace en Configuración. — _cliente/abogado_
+  - [x] Consentimiento expreso para presupuesto y enganche (art. 7): la IA no los pide sin autorización (el validador lo bloquea); si el prospecto los da, se usan para responder pero quedan pendientes hasta que diga "Sí" (se guarda la fecha y su respuesta); con "No" se descartan y no se vuelve a preguntar. — _2026-10-07, dev; eval 18/18_
+  - [ ] Contrato de encargo desarrolladora ↔ Ignia (datos, finalidad, plazo, borrado). — _legal_
+  - [x] ARCO desde el panel: exportar (JSON) y eliminar todos los datos de un prospecto (gerente/dueño; queda constancia sin datos personales). — _2026-10-07, dev_
   - [ ] Regla: solo IA que no entrene con los datos (Workers AI, incluidos modelos chinos alojados en Cloudflare, o Claude); nunca APIs directas de DeepSeek/Kimi.
 - [ ] Medir el consumo de IA por cliente (AI Gateway o neuronas por desarrolladora) para facturarlo al costo: **Ignia no absorbe IA ni WhatsApp**, los paga el cliente.

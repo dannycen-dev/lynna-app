@@ -130,6 +130,10 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
 | `respond.ts` | Contexto, bitácora `ai_audit_log` y envío por WhatsApp (o "simulado" sin credenciales de Meta) |
 
 - **Simulador**: en el panel, *Agente de IA*. Mismo código que WhatsApp, sin Meta.
+- **Privacidad** (`apps/api/src/privacy/consent.ts`, LFPDPPP): el sistema agrega el aviso de privacidad a la primera
+  respuesta (enlace en Configuración). Presupuesto y enganche solo se guardan con consentimiento expreso: sin él, quedan
+  en `pending_financial` y se pregunta "¿me autorizas?"; el "Sí"/"No" queda con fecha y texto. La IA no puede pedirlos sin
+  autorización (validador). En la ficha: exportar y eliminar datos (ARCO), solo gerente/dueño.
 - **Base de conocimiento** (`apps/api/src/knowledge/`): textos que aprueba la desarrolladora (servicios, proceso de
   compra, formas de pago…) en el panel, con un probador "como la IA". Búsqueda con FTS5 en D1 (`kb_fts`, mantenido por
   triggers); la IA solo ve los **aprobados** y sus montos/horas cuentan como datos verificados para el validador.
@@ -139,7 +143,7 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
   simultáneas. El cron avisa al vendedor 2 h antes. Los recordatorios al prospecto por WhatsApp llegan con la Fase 2.
 - **Modelo**: `AI_MODEL` en `wrangler.jsonc` por entorno. Para elegirlo con datos:
   `pnpm --filter @lynna/api eval:agent --url https://devlynna.igniastudio.mx --token <ADMIN_API_TOKEN> --models m1,m2`.
-  16 escenarios (incluye base de conocimiento, agendar y cancelar visitas; requieren los datos de `demo:crm`).
+  18 escenarios (incluye privacidad, base de conocimiento, agendar y cancelar visitas; requieren los datos de `demo:crm`).
 - **Pruebas**: Vitest usa un LLM "de guion"; el E2E usa `AI_MODEL=fake` (determinista, solo `ENVIRONMENT=local`, sin red).
 - `pnpm dev` usa Workers AI real (gasta neuronas de la cuenta de Ignia). `wrangler dev` se cae a veces al recargar
   en caliente con la conexión remota de IA: si pasa, reinícialo.

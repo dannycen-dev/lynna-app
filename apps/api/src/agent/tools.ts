@@ -32,9 +32,20 @@ export type Facts = {
   cancelled: boolean;
   /** El prospecto ya tenía una cita vigente antes de este turno (se puede recordar, no inventar otra). */
   existing: boolean;
+  /** Autorizó guardar sus datos financieros: solo así la IA puede preguntarlos. */
+  financialConsent: boolean;
 };
 
-export const newFacts = (): Facts => ({ lots: new Set(), amounts: new Set(), times: new Set(), dates: new Set(), booked: false, cancelled: false, existing: false });
+export const newFacts = (): Facts => ({
+  lots: new Set(),
+  amounts: new Set(),
+  times: new Set(),
+  dates: new Set(),
+  booked: false,
+  cancelled: false,
+  existing: false,
+  financialConsent: false,
+});
 
 /** "viernes 9 de octubre, 16:00" → hora y fecha verificadas. */
 export function rememberSlot(facts: Facts, label: string) {
@@ -54,6 +65,8 @@ export type ToolContext = {
   facts: Facts;
   /** Se llena si la IA llamó escalar_a_asesor en este turno. */
   escalation: { reason: EscalationReason; detail: string } | null;
+  /** El prospecto dio presupuesto/enganche sin haber autorizado datos financieros: quedaron pendientes. */
+  financialPending?: boolean;
 };
 
 const pesos = (cents: number) => Math.round(cents / 100);
@@ -377,24 +390,50 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
       if (!parsed.success) return { error: "Datos inválidos; guarda solo lo que el prospecto dijo." };
       const a = parsed.data;
       const interest = a.desarrollo_interes ? (await findDevelopment(db, tenantId, a.desarrollo_interes)).match : undefined;
+      const [current] = await db.select().from(prospects).where(eq(prospects.id, ctx.prospectId));
+      if (!current) return { error: "Prospecto no encontrado." };
+      // Presupuesto y enganche son datos financieros: solo se guardan con su consentimiento expreso (LFPDPPP art. 7).
+      const financial = {
+        ...(a.presupuesto_mxn ? { budgetCents: Math.round(a.presupuesto_mxn * 100) } : {}),
+        ...(a.enganche_disponible_mxn !== undefined ? { downPaymentCents: Math.round(a.enganche_disponible_mxn * 100) } : {}),
+      };
+      const hasFinancial = Object.keys(financial).length > 0;
+      const canStoreFinancial = Boolean(current.consentAt);
       const update = {
         ...(a.nombre ? { name: a.nombre } : {}),
         ...(a.correo ? { email: a.correo.toLowerCase() } : {}),
         ...(a.ciudad ? { city: a.ciudad } : {}),
-        ...(a.presupuesto_mxn ? { budgetCents: Math.round(a.presupuesto_mxn * 100) } : {}),
-        ...(a.enganche_disponible_mxn !== undefined ? { downPaymentCents: Math.round(a.enganche_disponible_mxn * 100) } : {}),
+        ...(canStoreFinancial ? financial : {}),
         ...(a.plazo ? { timeframe: a.plazo } : {}),
         ...(a.uso ? { purpose: a.uso } : {}),
         ...(interest ? { interestDevelopmentId: interest.id } : {}),
       };
-      if (Object.keys(update).length === 0) return { ok: true, sin_cambios: true };
-      const [current] = await db.select().from(prospects).where(eq(prospects.id, ctx.prospectId));
-      const next = { ...current!, ...update };
+      // Sin autorización: se apartan (salvo que ya la haya negado) y el sistema se la pide al final del turno.
+      const pending = hasFinancial && !canStoreFinancial && !current.consentDeniedAt ? { ...(current.pendingFinancial ?? {}), ...financial } : null;
+      if (hasFinancial && !canStoreFinancial) ctx.financialPending = !current.consentDeniedAt;
+      if (Object.keys(update).length === 0 && !pending) return { ok: true, sin_cambios: true };
+      const next = { ...current, ...update };
       await db
         .update(prospects)
-        .set({ ...update, score: computeScore(next), ...(current!.stage === "new" ? { stage: "qualified" as const } : {}), updatedAt: Date.now() })
+        .set({
+          ...update,
+          ...(pending ? { pendingFinancial: pending } : {}),
+          score: computeScore(next),
+          ...(current.stage === "new" && Object.keys(update).length > 0 ? { stage: "qualified" as const } : {}),
+          updatedAt: Date.now(),
+        })
         .where(eq(prospects.id, ctx.prospectId));
-      return { ok: true, guardado: Object.keys(a) };
+      const savedKeys = Object.keys(a).filter((k) => canStoreFinancial || (k !== "presupuesto_mxn" && k !== "enganche_disponible_mxn"));
+      return {
+        ok: true,
+        guardado: savedKeys,
+        ...(hasFinancial && !canStoreFinancial
+          ? {
+              sin_guardar: ["presupuesto_mxn", "enganche_disponible_mxn"].filter((k) => k in a),
+              nota: "El presupuesto/enganche NO se guardó: falta su autorización y el sistema se la pedirá al final de tu mensaje. Úsalo para responderle, pero no pidas la autorización tú.",
+            }
+          : {}),
+      };
     }
 
     case "horarios_disponibles": {

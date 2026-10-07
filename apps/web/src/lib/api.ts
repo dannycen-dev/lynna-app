@@ -4,6 +4,7 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  PrivacySettings,
   KbArticle,
   KbSearch,
   AgendaItem,
@@ -388,5 +389,34 @@ export function useDeleteArticle() {
   return useMutation({
     mutationFn: (id: string) => call<void>(`/knowledge/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => invalidate("knowledge", "knowledge-search"),
+  });
+}
+
+// ── Privacidad ────────────────────────────────────────────────────────────────
+
+export const usePrivacySettings = () => useApiQuery<PrivacySettings>(["privacy-settings"], "/settings/privacy");
+
+export function useSavePrivacySettings() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (data: PrivacySettings) => call<PrivacySettings>("/settings/privacy", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => invalidate("privacy-settings"),
+  });
+}
+
+/** URL de descarga del expediente del prospecto (la cookie de sesión viaja sola: mismo origen). */
+export function useProspectExportUrl(id: string) {
+  const { tenant } = useApi();
+  return `/api/admin/tenants/${encodeURIComponent(tenant)}/prospects/${encodeURIComponent(id)}/export`;
+}
+
+export function useDeleteProspect() {
+  const { call } = useApi();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      call<void>(`/prospects/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
+    onSuccess: () => invalidate("prospects", "summary", "agenda", "notifications"),
   });
 }

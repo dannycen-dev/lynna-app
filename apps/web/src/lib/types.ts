@@ -201,7 +201,16 @@ export type HistoryItem = {
 };
 
 export type ProspectDetail = {
-  prospect: Prospect & { email: string | null; interestDevelopmentId: string | null };
+  prospect: Prospect & {
+    email: string | null;
+    interestDevelopmentId: string | null;
+    privacyNoticeAt: number | null;
+    consentRequestedAt: number | null;
+    consentAt: number | null;
+    consentDeniedAt: number | null;
+    consentText: string | null;
+    pendingFinancial: { budgetCents?: number; downPaymentCents?: number } | null;
+  };
   conversation: { id: string; aiPaused: boolean; takenByUserId: string | null; takenByName: string | null; takenAt: number | null; lastInboundAt: number | null } | null;
   messages: Message[];
   notes: ProspectNote[];
@@ -333,3 +342,5 @@ export type KbArticle = {
 };
 
 export type KbSearch = { query: string | null; hits: { id: string; title: string; body: string; category: KbCategory }[] };
+
+export type PrivacySettings = { privacyNoticeUrl: string | null; privacyNoticeText: string | null };

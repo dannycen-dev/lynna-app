@@ -91,6 +91,15 @@ function statements(t: string): string[] {
     .map((s) => s.trim())
     .filter((s) => s && !s.startsWith("¿") && !s.endsWith("?"));
 }
+/** Preguntar presupuesto, enganche o cuánto quiere invertir: requiere su consentimiento expreso (LFPDPPP art. 7). */
+const ASKS_FINANCIAL =
+  /\b(cual|de cuanto|que) (es |seria |sera )?(tu|su) (presupuesto|enganche)\b|\bcon cuanto (cuentas|cuenta|dispones|dispone)\b|\bcuanto (tienes|tiene|traes|piensas|planeas|quieres|quisieras|podrias|puedes) (de |para )?(el )?(enganche|presupuesto|invertir|gastar|destinar|pagar)\b|\b(tienes|tiene|cuentas con|cuenta con) (algun |un |el )?(presupuesto|enganche)\b|\b(que|cual) presupuesto (tienes|tiene|manejas|maneja|traes)\b|\bcuanto (te gustaria|quieres) (invertir|gastar)\b/;
+/** Datos internos que nunca deben llegar al prospecto: JSON de las herramientas, ids, nombres de campos. */
+const INTERNAL_DATA = /\{\s*"|"\s*:\s*["\[{\d]|\b(lote_id|plan_id|tool_call|precio_total|precio_m2|superficie_m2)\b|\b\w+_mxn\b|\blot-[a-z0-9]+-[a-z0-9]+\b/i;
+
+/** "Dame un momento, déjame consultar": por WhatsApp nadie vuelve a escribir después; hay que hacerlo ahora. */
+const DEFERS_ACTION =
+  /\b(dame|deme|dame tantito|permiteme|permitame) (un )?(momento|momentito|segundo|minuto)\b|\b(dejame|permiteme|deja que|voy a) (consultar|revisar|checar|buscar|verificar)\b|\ben (un|unos) (momento|momentito|minutos?) te (digo|confirmo|comparto|aviso|paso)\b/;
 const MONTHS = "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre";
 
 /** "10:00", "4:30 pm" → "10:00", "16:30". */
@@ -112,6 +121,12 @@ export function validateReply(text: string, facts: Facts): GuardResult {
 
   for (const rule of FORBIDDEN) if (rule.pattern.test(t)) reasons.push(rule.reason);
 
+  // Sobre el texto original (con mayúsculas y comillas tal cual).
+  if (INTERNAL_DATA.test(text) || /\b(herramienta|herramientas|tool|tools|funcion|json)\b/.test(t)) {
+    reasons.push("la respuesta trae datos internos (JSON o campos de las herramientas)");
+  }
+  if (DEFERS_ACTION.test(t)) reasons.push("promete consultar después en lugar de usar las herramientas ahora");
+  if (!facts.financialConsent && ASKS_FINANCIAL.test(t)) reasons.push("pide datos financieros sin la autorización del prospecto");
   if (BOOKING_CLAIM.test(t) && !facts.booked && !facts.existing) reasons.push("confirma una cita que no se agendó con agendar_visita");
   // Solo aplica si hay o hubo cita de por medio (una cita vigente o una herramienta de agenda en el turno).
   const agendaContext = facts.existing || facts.booked || facts.cancelled || /\b(cita|visita)\b/.test(t);

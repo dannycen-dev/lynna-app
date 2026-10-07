@@ -1,8 +1,20 @@
-import { ArrowLeft, Bot, CalendarCheck, History, MessageCircle, Send, StickyNote, UserCheck, UserRoundCheck } from "lucide-react";
+import { ArrowLeft, Bot, CalendarCheck, Download, History, MessageCircle, Send, ShieldCheck, StickyNote, Trash2, UserCheck, UserRoundCheck } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useAddNote, useAssign, useBookAppointment, useChangeStage, useProspect, useSendHumanMessage, useSlots, useTakeover, useTeam } from "../lib/api";
+import {
+  useAddNote,
+  useAssign,
+  useBookAppointment,
+  useChangeStage,
+  useDeleteProspect,
+  useProspect,
+  useProspectExportUrl,
+  useSendHumanMessage,
+  useSlots,
+  useTakeover,
+  useTeam,
+} from "../lib/api";
 import {
   addDaysIso,
   APPOINTMENT_STATUS_LABEL,
@@ -114,6 +126,7 @@ export function ProspectoFicha() {
             </div>
           </div>
           <Appointments prospectId={prospect.id} appointments={detail.data.appointments} />
+          <Privacy prospect={prospect} />
           <Notes prospectId={prospect.id} notes={notes} />
           <Timeline history={history} />
         </aside>
@@ -361,6 +374,95 @@ function BookDialog({ prospectId, rescheduling, onClose }: { prospectId: string;
         </div>
       </div>
     </Dialog>
+  );
+}
+
+function Privacy({ prospect }: { prospect: ProspectDetail["prospect"] }) {
+  const { canWrite } = useSession();
+  const exportUrl = useProspectExportUrl(prospect.id);
+  const remove = useDeleteProspect();
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
+  const [reason, setReason] = useState("");
+  const pending = prospect.pendingFinancial;
+  const consent = prospect.consentAt
+    ? { tone: "available", label: "Autorizó", detail: `${dateTime(prospect.consentAt)}${prospect.consentText ? ` · respondió "${prospect.consentText}"` : ""}` }
+    : prospect.consentDeniedAt
+      ? { tone: "sold", label: "No autorizó", detail: dateTime(prospect.consentDeniedAt) }
+      : prospect.consentRequestedAt
+        ? { tone: "reserved", label: "Pendiente", detail: `Se le preguntó ${timeAgo(prospect.consentRequestedAt)}` }
+        : { tone: "info", label: "No se ha pedido", detail: "Se pide cuando comparte presupuesto o enganche" };
+  return (
+    <div className="card">
+      <div className="card__header">
+        <ShieldCheck size={16} /> Privacidad
+      </div>
+      <div className="card__body stack" style={{ gap: 10 }}>
+        <dl className="dl">
+          <dt>Aviso de privacidad</dt>
+          <dd>{prospect.privacyNoticeAt ? `Enviado ${dateTime(prospect.privacyNoticeAt)}` : "Aún no se envía"}</dd>
+          <dt>Datos financieros</dt>
+          <dd>
+            <span className={`badge badge--${consent.tone}`}>{consent.label}</span>
+            <span className="muted" style={{ display: "block", fontSize: 12 }}>
+              {consent.detail}
+            </span>
+          </dd>
+          {pending && (pending.budgetCents || pending.downPaymentCents !== undefined) && (
+            <>
+              <dt>Sin guardar</dt>
+              <dd className="muted">
+                {[pending.budgetCents ? `presupuesto ${money(pending.budgetCents)}` : null, pending.downPaymentCents !== undefined ? `enganche ${money(pending.downPaymentCents)}` : null]
+                  .filter(Boolean)
+                  .join(" y ")}{" "}
+                — esperando su autorización
+              </dd>
+            </>
+          )}
+        </dl>
+        {canWrite && (
+          <div className="row" style={{ gap: 8 }}>
+            <a className="btn btn--sm" href={exportUrl} download>
+              <Download size={14} /> Exportar datos (ARCO)
+            </a>
+            <button className="btn btn--sm btn--ghost" onClick={() => setDeleting(true)}>
+              <Trash2 size={14} /> Eliminar datos (ARCO)
+            </button>
+          </div>
+        )}
+      </div>
+      {deleting && (
+        <Dialog
+          open
+          onClose={() => setDeleting(false)}
+          title="Eliminar todos los datos del prospecto"
+          footer={
+            <>
+              <button className="btn" onClick={() => setDeleting(false)}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn--primary"
+                disabled={reason.trim().length < 5 || remove.isPending}
+                onClick={() => remove.mutate({ id: prospect.id, reason: reason.trim() }, { onSuccess: () => navigate("/prospectos") })}
+              >
+                Eliminar definitivamente
+              </button>
+            </>
+          }
+        >
+          <p style={{ marginTop: 0 }}>
+            Se borran la conversación, notas, citas, avisos e historial de <strong>{displayName(prospect)}</strong>. No se puede deshacer. Exporta sus datos antes si el titular
+            los pidió.
+          </p>
+          <div className="field">
+            <label htmlFor="arco-reason">Motivo</label>
+            <textarea id="arco-reason" className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej. Solicitud de cancelación del titular recibida por correo el 7 de octubre" />
+          </div>
+          <ErrorAlert error={remove.error} />
+        </Dialog>
+      )}
+    </div>
   );
 }
 

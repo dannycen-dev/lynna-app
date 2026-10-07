@@ -33,10 +33,10 @@ function envelope(value: Record<string, unknown>) {
   };
 }
 
-export function inboundText(from: string, text: string, wamid = `wamid.E2E.${randomUUID()}`) {
+export function inboundText(from: string, text: string, wamid = `wamid.E2E.${randomUUID()}`, profileName = "Prospecto E2E") {
   const body = JSON.stringify(
     envelope({
-      contacts: [{ profile: { name: "Prospecto E2E" }, wa_id: from }],
+      contacts: [{ profile: { name: profileName }, wa_id: from }],
       messages: [{ from, id: wamid, timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body: text } }],
     }),
   );

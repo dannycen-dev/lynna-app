@@ -1,9 +1,11 @@
-import { CalendarClock, Shuffle, Users } from "lucide-react";
+import { CalendarClock, ShieldCheck, Shuffle, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import {
   useAssignmentSettings,
   useAvailability,
+  usePrivacySettings,
+  useSavePrivacySettings,
   useSaveAppointmentSettings,
   useSaveAvailability,
   useTeam,
@@ -24,6 +26,7 @@ export function Configuracion() {
         <AssignmentCard disabled={!canWrite} />
         <TeamCard disabled={!canWrite} />
         <AvailabilityCard canWrite={canWrite} />
+        <PrivacyCard disabled={!canWrite} />
       </div>
     </div>
   );
@@ -252,5 +255,71 @@ function MemberSchedule({ member }: { member: { id: string; name: string; role: 
       {invalid && <div className="alert alert--error" style={{ marginTop: 8 }}>La hora de fin debe ser mayor que la de inicio.</div>}
       <ErrorAlert error={save.error} />
     </section>
+  );
+}
+
+function PrivacyCard({ disabled }: { disabled: boolean }) {
+  const { tenants, tenant } = useSession();
+  const settings = usePrivacySettings();
+  const save = useSavePrivacySettings();
+  const [url, setUrl] = useState("");
+  const [text, setText] = useState("");
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (settings.data) {
+      setUrl(settings.data.privacyNoticeUrl ?? "");
+      setText(settings.data.privacyNoticeText ?? "");
+    }
+  }, [settings.data]);
+  const company = tenants.find((t) => t.slug === tenant)?.name ?? "La desarrolladora";
+  // Misma regla que la API (privacy/consent.ts → privacyNotice).
+  const preview = text.trim()
+    ? url.trim() && !text.includes(url.trim())
+      ? `${text.trim()} ${url.trim()}`
+      : text.trim()
+    : url.trim()
+      ? `🔒 ${company} trata tus datos personales conforme a su aviso de privacidad: ${url.trim()}`
+      : `🔒 ${company} trata tus datos personales conforme a su aviso de privacidad; pídelo a tu asesor cuando quieras.`;
+  if (settings.isPending) return <Spinner />;
+  return (
+    <div className="card">
+      <div className="card__header">
+        <ShieldCheck size={16} /> Privacidad (LFPDPPP)
+      </div>
+      <form
+        className="card__body stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          save.mutate({ privacyNoticeUrl: url.trim() || null, privacyNoticeText: text.trim() || null }, { onSuccess: () => setSaved(true) });
+        }}
+      >
+        <p className="muted" style={{ margin: 0 }}>
+          La IA manda el aviso de privacidad en su primera respuesta a cada prospecto, y pide autorización antes de guardar presupuesto o enganche (datos financieros, art. 7).
+        </p>
+        <div className="field">
+          <label htmlFor="privacy-url">Enlace al aviso de privacidad</label>
+          <input id="privacy-url" className="input" type="url" placeholder="https://tudesarrolladora.mx/aviso-de-privacidad" value={url} onChange={(e) => setUrl(e.target.value)} disabled={disabled} />
+          <span className="field__hint">Debe ser https. Si no hay enlace, el aviso dice que lo pidan a su asesor.</span>
+        </div>
+        <div className="field">
+          <label htmlFor="privacy-text">Texto del aviso (opcional)</label>
+          <textarea id="privacy-text" className="textarea" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} disabled={disabled} placeholder="Déjalo vacío para usar el texto estándar." />
+        </div>
+        <div className="note">
+          <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+            Así lo verá el prospecto:
+          </div>
+          <div aria-label="Vista previa del aviso">{preview}</div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn--primary" type="submit" disabled={disabled || save.isPending}>
+            Guardar
+          </button>
+          {saved && <span className="muted">Guardado</span>}
+        </div>
+        <ErrorAlert error={save.error ?? settings.error} />
+      </form>
+    </div>
   );
 }

@@ -35,6 +35,9 @@ export const tenants = sqliteTable("tenants", {
   // Agenda: zona horaria del negocio (horarios de los vendedores) y duración de cada cita.
   timezone: text("timezone").notNull().default("America/Mexico_City"),
   appointmentMinutes: integer("appointment_minutes").notNull().default(60),
+  // Privacidad (LFPDPPP): enlace al aviso de privacidad y texto corto que se manda en el primer mensaje.
+  privacyNoticeUrl: text("privacy_notice_url"),
+  privacyNoticeText: text("privacy_notice_text"),
   createdAt: createdAt(),
 });
 
@@ -194,7 +197,14 @@ export const prospects = sqliteTable(
     handoffAt: integer("handoff_at"),
     handoffReason: text("handoff_reason"),
     source: text("source", { enum: ["whatsapp", "simulator"] }).notNull().default("whatsapp"),
+    // Privacidad (LFPDPPP). Aviso mostrado en el primer mensaje; consentimiento EXPRESO para datos
+    // financieros/patrimoniales (presupuesto, enganche): sin él no se guardan, quedan en pending_financial.
+    privacyNoticeAt: integer("privacy_notice_at"),
+    consentRequestedAt: integer("consent_requested_at"),
     consentAt: integer("consent_at"),
+    consentDeniedAt: integer("consent_denied_at"),
+    consentText: text("consent_text"), // lo que respondió el prospecto (evidencia)
+    pendingFinancial: text("pending_financial", { mode: "json" }).$type<{ budgetCents?: number; downPaymentCents?: number }>(),
     optedOutAt: integer("opted_out_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

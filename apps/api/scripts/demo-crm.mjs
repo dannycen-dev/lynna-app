@@ -163,11 +163,14 @@ for (const p of P) {
   const phone = `52199990${String(p.n).padStart(5, "0")}`;
   const reason = p.handoff ?? (p.stage === "ready_to_buy" ? "compra" : null);
 
+  // Privacidad: todos recibieron el aviso; quien tiene presupuesto/enganche guardado lo autorizó (LFPDPPP art. 7).
+  const financial = Boolean(p.budget || p.downPayment);
+  const privacyCols = `${created + MIN}, ${financial ? created + 3 * MIN : "NULL"}, ${financial ? created + 4 * MIN : "NULL"}, ${financial ? q("Sí") : "NULL"}`;
   sql.push(`INSERT INTO prospects (id, tenant_id, phone, name, profile_name, email, stage, score, budget_cents, down_payment_cents, purpose, timeframe, city,
-    assigned_user_id, assigned_at, handoff_at, handoff_reason, source, created_at, updated_at)
+    assigned_user_id, assigned_at, handoff_at, handoff_reason, source, privacy_notice_at, consent_requested_at, consent_at, consent_text, created_at, updated_at)
     VALUES (${q(id)}, 'tnt-demo', ${q(phone)}, ${q(p.name)}, ${q(p.profile ?? p.name)}, ${q(p.email)}, ${q(p.stage)}, ${p.score},
     ${q(p.budget ? p.budget * 100 : null)}, ${q(p.downPayment ? p.downPayment * 100 : null)}, ${q(p.purpose)}, ${q(p.timeframe)}, ${q(p.city)},
-    ${user(p.seller)}, ${p.seller ? created : "NULL"}, ${q(handoffAt)}, ${q(reason)}, 'whatsapp', ${created}, ${lastIn})`);
+    ${user(p.seller)}, ${p.seller ? created : "NULL"}, ${q(handoffAt)}, ${q(reason)}, 'whatsapp', ${privacyCols}, ${created}, ${lastIn})`);
 
   sql.push(`INSERT INTO conversations (id, tenant_id, prospect_id, wa_account_id, ai_paused, taken_by_user_id, taken_at, last_inbound_at, last_outbound_at, created_at)
     VALUES (${q(cid)}, 'tnt-demo', ${q(id)}, 'wa-demo', ${p.taken ? 1 : 0}, ${user(p.taken)}, ${p.taken ? NOW - 365 * MIN : "NULL"}, ${lastIn}, ${lastIn + MIN}, ${created})`);

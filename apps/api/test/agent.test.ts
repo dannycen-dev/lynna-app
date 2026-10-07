@@ -66,7 +66,11 @@ beforeEach(async () => {
   );
   await env.DB.batch(statements(env.TEST_SEED_SQL).map((s) => env.DB.prepare(s)));
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO prospects (id, tenant_id, phone, stage, score, source, created_at, updated_at) VALUES (?, 'tnt-demo', '5219990000000', 'new', 0, 'simulator', 0, 0)").bind(PROSPECT_ID),
+    // Aviso de privacidad ya mostrado y datos financieros autorizados: estas pruebas miden el agente, no la
+    // privacidad (que tiene las suyas en privacy.test.ts).
+    env.DB.prepare(
+      "INSERT INTO prospects (id, tenant_id, phone, stage, score, source, privacy_notice_at, consent_at, created_at, updated_at) VALUES (?, 'tnt-demo', '5219990000000', 'new', 0, 'simulator', 1, 1, 0, 0)",
+    ).bind(PROSPECT_ID),
     env.DB.prepare("INSERT INTO conversations (id, tenant_id, prospect_id, wa_account_id, ai_paused, created_at) VALUES ('conv-test', 'tnt-demo', ?, 'wa-demo', 0, 0)").bind(PROSPECT_ID),
   ]);
 });
@@ -176,7 +180,8 @@ describe("simulador (HTTP, modelo falso)", () => {
     expect(first.status).toBe(200);
     const a = (await first.json()) as { reply: string; tools: { name: string }[]; model: string };
     expect(a.model).toBe("fake");
-    expect(a.reply).toBe("Tengo disponible Manzana C, lote 2 por $560,000 MXN. ¿Te platico de los planes de pago?");
+    // Primera respuesta a un prospecto nuevo: lleva el aviso de privacidad al final.
+    expect(a.reply).toMatch(/^Tengo disponible Manzana C, lote 2 por \$560,000 MXN\. ¿Te platico de los planes de pago\?\n\n🔒 .*aviso de privacidad/);
     expect(a.tools.map((t) => t.name)).toEqual(["buscar_lotes"]);
 
     const second = (await (await send("Quiero comprar")).json()) as { escalation: string; prospect: { stage: string } };

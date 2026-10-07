@@ -9,6 +9,7 @@ import { extractAmounts, validateReply } from "./guard";
 import { detectEscalation, isOptOut } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
 import { buildSystemPrompt, FALLBACK_REPLY, MEDIA_REPLY, OPT_OUT_REPLY } from "./prompt";
+import { CONSENT_QUESTION, isAffirmative, isNegative, mentionsFinancialData, privacyNotice, recordConsent } from "../privacy/consent";
 import { escalate, newFacts, rememberSlot, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
 
 const MAX_TOOL_ROUNDS = 5;
@@ -63,8 +64,38 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   // Lo que el propio prospecto dijo (su presupuesto, su enganche) se puede repetir: cuenta como dato verificado.
   for (const amount of extractAmounts(incomingText.replace(/(\d[\d,.]*)\s*(pesos|mxn)\b/gi, "$$$1"))) ctx.facts.amounts.add(amount);
   const base = { draft: null, toolTrace: [], blocked: [], neurons: 0, modelsUsed: [] };
-  const done = (r: Omit<AgentResult, "latencyMs" | "escalation">): AgentResult => ({
+  let prospect = input.prospect;
+  const tenantRow = await input.db
+    .select({ timezone: tenants.timezone, name: tenants.name, privacyNoticeUrl: tenants.privacyNoticeUrl, privacyNoticeText: tenants.privacyNoticeText })
+    .from(tenants)
+    .where(eq(tenants.id, input.tenant.id))
+    .get();
+
+  /**
+   * Privacidad, agregada por el sistema (no por el modelo) al final de la respuesta:
+   * - la pregunta de consentimiento si el prospecto dio datos financieros sin haberlos autorizado;
+   * - el aviso de privacidad en la primera respuesta.
+   */
+  async function withPrivacy(reply: string): Promise<string> {
+    const now = Date.now();
+    const parts = [reply];
+    const set: Partial<typeof prospects.$inferInsert> = {};
+    const askAgain = !prospect.consentRequestedAt || now - prospect.consentRequestedAt > 24 * 60 * 60 * 1000;
+    if (!prospect.consentAt && !prospect.consentDeniedAt && askAgain && (ctx.financialPending || mentionsFinancialData(incomingText))) {
+      parts.push(CONSENT_QUESTION);
+      set.consentRequestedAt = now;
+    }
+    if (!prospect.privacyNoticeAt && tenantRow) {
+      parts.push(privacyNotice({ ...tenantRow, name: tenantRow.name ?? input.tenant.name }));
+      set.privacyNoticeAt = now;
+    }
+    if (Object.keys(set).length > 0) await input.db.update(prospects).set(set).where(eq(prospects.id, prospect.id));
+    return parts.join("\n\n");
+  }
+
+  const done = async (r: Omit<AgentResult, "latencyMs" | "escalation">, privacy = true): Promise<AgentResult> => ({
     ...r,
+    reply: privacy ? await withPrivacy(r.reply) : r.reply,
     escalation: ctx.escalation?.reason ?? null,
     latencyMs: Date.now() - started,
   });
@@ -81,8 +112,21 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
       input.db.update(prospects).set({ optedOutAt: Date.now(), updatedAt: Date.now() }).where(eq(prospects.id, input.prospect.id)),
       auditInsert(input.db, { tenantId: input.tenant.id, actor: "ai", entity: "prospect", entityId: input.prospect.id, action: "opted_out" }),
     ]);
-    return done({ ...base, reply: OPT_OUT_REPLY, fallback: false, deterministic: true });
+    return done({ ...base, reply: OPT_OUT_REPLY, fallback: false, deterministic: true }, false);
   }
+
+  // 3. Respuesta a la pregunta de consentimiento ("Sí" / "No"): se registra con su texto como evidencia.
+  let consentNote: string | null = null;
+  if (prospect.consentRequestedAt && !prospect.consentAt && !prospect.consentDeniedAt) {
+    const granted = isAffirmative(incomingText);
+    if (granted || isNegative(incomingText)) {
+      prospect = await recordConsent(input.db, { tenantId: input.tenant.id, prospect, granted, text: incomingText });
+      consentNote = granted
+        ? "El prospecto acaba de AUTORIZAR que guardemos sus datos financieros: agradécelo en una frase y sigue ayudándole."
+        : "El prospecto NO autorizó guardar sus datos financieros: respétalo, no se los vuelvas a pedir y sigue ayudándole.";
+    }
+  }
+  ctx.facts.financialConsent = Boolean(prospect.consentAt);
 
   const devs = await input.db
     .select({ name: developments.name, city: developments.city })
@@ -91,10 +135,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     .orderBy(asc(developments.name));
 
   // Cita vigente: el modelo la conoce para reagendar o recordarla, y su hora cuenta como dato verificado.
-  const [tenantRow, current] = await Promise.all([
-    input.db.select({ timezone: tenants.timezone }).from(tenants).where(eq(tenants.id, input.tenant.id)).get(),
-    upcomingAppointment(input.db, input.prospect.id),
-  ]);
+  const current = await upcomingAppointment(input.db, input.prospect.id);
   const timezone = tenantRow?.timezone ?? "America/Mexico_City";
   if (current) {
     rememberSlot(ctx.facts, slotLabel(current.startsAt, timezone));
@@ -108,9 +149,11 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
         assistantName: "Lynna",
         companyName: input.tenant.name,
         today: todayIn(),
-        prospectName: input.prospect.name ?? input.prospect.profileName,
+        prospectName: prospect.name ?? prospect.profileName,
         developments: devs,
-        handedOff: Boolean(input.prospect.handoffAt),
+        handedOff: Boolean(prospect.handoffAt),
+        financialConsent: Boolean(prospect.consentAt),
+        consentNote,
         appointment: current ? slotLabel(current.startsAt, timezone) : null,
       }),
     },
@@ -178,6 +221,10 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
         content: `[Revisión interna, no la menciones] Tu respuesta no se envió porque: ${check.reasons.join("; ")}. Reescríbela usando solo datos de las herramientas; si no tienes el dato, ofrece que un asesor lo confirme.${
           check.reasons.some((r) => /cita|agenda/.test(r))
             ? " Si el prospecto pidió agendar, cambiar o cancelar su visita, llama primero a agendar_visita o cancelar_cita y confirma solo lo que la herramienta responda."
+            : ""
+        }${
+          check.reasons.some((r) => /financieros|consultar después/.test(r))
+            ? " No preguntes presupuesto ni enganche: si el prospecto ya dijo cuánto tiene, úsalo en buscar_lotes ahora mismo y muéstrale opciones en esta misma respuesta."
             : ""
         }`,
       });
