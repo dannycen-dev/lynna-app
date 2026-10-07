@@ -10,3 +10,6 @@ coverage/
 worker-configuration.d.ts.bak
 test-results/
 playwright-report/
+
+# Documentos comerciales internos de Ignia (precios, márgenes): nunca al repo público
+propuestas/
