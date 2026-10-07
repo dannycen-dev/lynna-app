@@ -1,5 +1,4 @@
 import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { importLots, parseLotsCsv } from "../catalog/lots-import";
@@ -29,6 +28,7 @@ import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
 import { prospectScope } from "../crm/assignment";
+import { listProspects, prospectFilters } from "../crm/prospect-list";
 import { agenda } from "./agenda";
 import { knowledge } from "./knowledge";
 import { crm } from "./crm";
@@ -348,45 +348,12 @@ admin.get("/tenants/:tenant/developments/:development/payment-plans", async (c) 
 
 // ── Prospectos (base del CRM de la Fase 4) ─────────────────────────────────────
 
-const assignee = alias(users, "assignee");
-
 admin.get("/tenants/:tenant/prospects", async (c) => {
-  const db = getDb(c.env.DB);
-  const rows = await db
-    .select({
-      id: prospects.id,
-      phone: prospects.phone,
-      name: prospects.name,
-      profileName: prospects.profileName,
-      stage: prospects.stage,
-      score: prospects.score,
-      city: prospects.city,
-      purpose: prospects.purpose,
-      budgetCents: prospects.budgetCents,
-      downPaymentCents: prospects.downPaymentCents,
-      timeframe: prospects.timeframe,
-      handoffAt: prospects.handoffAt,
-      handoffReason: prospects.handoffReason,
-      optedOutAt: prospects.optedOutAt,
-      source: prospects.source,
-      createdAt: prospects.createdAt,
-      conversationId: conversations.id,
-      aiPaused: conversations.aiPaused,
-      takenByUserId: conversations.takenByUserId,
-      lastOutboundAt: conversations.lastOutboundAt,
-      assignedUserId: prospects.assignedUserId,
-      assignedName: assignee.name,
-      updatedAt: prospects.updatedAt,
-      lastInboundAt: conversations.lastInboundAt,
-      messageCount: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messages.conversationId} = ${conversations.id})`,
-      nextAppointmentAt: sql<number | null>`(SELECT min(${appointments.startsAt}) FROM ${appointments} WHERE ${appointments.prospectId} = ${prospects.id} AND ${appointments.status} = 'scheduled' AND ${appointments.endsAt} >= ${Date.now()})`,
-    })
-    .from(prospects)
-    .leftJoin(conversations, eq(conversations.prospectId, prospects.id))
-    .leftJoin(assignee, eq(assignee.id, prospects.assignedUserId))
-    .where(and(eq(prospects.tenantId, c.var.tenant.id), prospectScope(c.var.principal)))
-    .orderBy(desc(conversations.lastInboundAt))
-    .limit(200);
+  const parsed = prospectFilters.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const { rows, total } = await listProspects(getDb(c.env.DB), c.var.tenant, c.var.principal, parsed.data);
+  // Si hay más de los que se devuelven, el panel avisa que conviene filtrar.
+  c.header("x-total-count", String(total));
   return c.json(rows);
 });
 

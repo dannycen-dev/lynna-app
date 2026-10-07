@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { ApiError, apiFetch } from "./api-client";
+import { ApiError, apiFetch, apiFetchWithTotal } from "./api-client";
 import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  Metrics,
   AgentSettings,
   PrivacySettings,
   KbArticle,
@@ -66,7 +67,48 @@ export const useDevelopmentPlans = (dev: string | undefined) =>
 export const usePlans = () => useApiQuery<PaymentPlan[]>(["plans"], "/payment-plans");
 export const useMedia = (dev: string | undefined) =>
   useApiQuery<Media[]>(["media", dev], dev ? `/developments/${encodeURIComponent(dev)}/media` : null);
-export const useProspects = () => useApiQuery<Prospect[]>(["prospects"], "/prospects");
+export type ProspectFilters = {
+  q?: string;
+  development?: string;
+  temperature?: "frio" | "tibio" | "caliente" | "listo";
+  stage?: string;
+  owner?: string;
+  source?: "whatsapp" | "simulator";
+  from?: string;
+  to?: string;
+};
+
+/** Quita los filtros vacíos y arma el query string. */
+export function filtersQuery(f: ProspectFilters): string {
+  const params = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined && v !== "") as [string, string][]);
+  return params.toString();
+}
+
+/** Prospectos con filtros del lado del servidor; `total` dice cuántos hay aunque la lista venga recortada. */
+export function useProspects(filters: ProspectFilters = {}) {
+  const { tenant, expire } = useSession();
+  const qs = filtersQuery(filters);
+  return useQuery({
+    queryKey: [tenant, "prospects", qs],
+    queryFn: async () => {
+      try {
+        return await apiFetchWithTotal<Prospect[]>(`/api/admin/tenants/${encodeURIComponent(tenant)}/prospects${qs ? `?${qs}` : ""}`);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) expire();
+        throw err;
+      }
+    },
+    enabled: tenant !== "",
+    placeholderData: (prev) => prev, // al cambiar filtros no parpadea la lista
+  });
+}
+
+/** URL de descarga del CSV con los mismos filtros (la cookie viaja sola: mismo origen). */
+export function useProspectsCsvUrl(filters: ProspectFilters) {
+  const { tenant } = useSession();
+  const qs = filtersQuery(filters);
+  return `/api/admin/tenants/${encodeURIComponent(tenant)}/exports/prospects.csv${qs ? `?${qs}` : ""}`;
+}
 
 export function useSimulation(lotId: string | undefined, planId: string | undefined, quoteDate: string) {
   const { call, tenant } = useApi();
@@ -435,3 +477,5 @@ export function useSaveAgentSettings() {
     onSuccess: (saved) => qc.setQueryData([tenant, "agent-settings"], saved),
   });
 }
+
+export const useMetrics = (days: 7 | 30 | 90) => useApiQuery<Metrics>(["metrics", days], `/metrics?days=${days}`);

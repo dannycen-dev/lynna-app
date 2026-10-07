@@ -292,7 +292,8 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] Ajuste menor: cuando la red de seguridad ya turnó (p. ej. escrituras), la IA a veces pregunta "¿quieres que un asesor te contacte?" en lugar de afirmar que lo hará.
 - [x] **Configuración por desarrolladora**: nombre del asistente y horario de atención de la oficina (fuera de horario la IA promete el contacto para cuando abre: "mañana a partir de las 9:00", en vez de "en breve"); aviso de privacidad (ya hecho); formas de pago → base de conocimiento. — _2026-10-07, dev; eval 19/19 con la oficina cerrada_
 - [x] Red de seguridad: si el prospecto pide hablar con una persona ("¿me puede marcar un asesor?"), se turna. — _caso real visto en dev_
-- [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
+- [x] **CRM**: filtros en el servidor (búsqueda por nombre/teléfono/correo, desarrollo, calificación, origen, vendedor, fechas; en la URL), exportar CSV (gerente/dueño; protegido contra fórmulas de Excel; queda en el historial) y página **Métricas** (embudo por la etapa más avanzada, respuesta de la IA, tiempo hasta que atiende un asesor, citas y asistencia, motivos de traspaso y de pérdida, por vendedor; 7/30/90 días). — _2026-10-07, dev_
+- [ ] CRM, mejoras: el tablero carga hasta 500 prospectos (avisa si hay más); paginar/virtualizar cuando el volumen real lo pida. Tiempo de atención de asesores en horas hábiles (hoy cuenta noches y fines de semana).
 - [ ] **Usuarios desde el panel**: alta, roles, desactivar, cambiar contraseña (hoy por script `pnpm user:create`).
 - [ ] **Apartado vencido**: avisar al vendedor cuando el cron libera un lote (§2.11).
 - [ ] **Seguimientos automáticos** (§2.7): secuencias con Workflows; el envío real depende de WhatsApp.

@@ -352,3 +352,21 @@ export type AgentSettings = {
   /** Lo que la IA le diría ahora a quien pide un asesor ("en breve", "mañana a partir de las 9:00"). */
   advisorEtaNow: string;
 };
+
+export type Metrics = {
+  period: { from: string; to: string; days: number };
+  prospects: { total: number; whatsapp: number; simulator: number; won: number; lost: number };
+  funnel: { stage: ProspectStage; count: number; pct: number }[];
+  lostReasons: { reason: string; count: number }[];
+  response: {
+    aiMedianSeconds: number | null;
+    aiSamples: number;
+    advisorMedianMinutes: number | null;
+    advisorWithin30Min: number | null;
+    handoffs: number;
+    handoffsPending: number;
+    handoffReasons: { reason: string; count: number }[];
+  };
+  appointments: { total: number; scheduled: number; completed: number; noShow: number; cancelled: number; showRate: number | null };
+  sellers: { userId: string; name: string; prospects: number; appointments: number; won: number; lost: number }[];
+};

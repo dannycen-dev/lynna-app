@@ -1,8 +1,8 @@
-import { Bot, CalendarCheck, Columns3, List, MessageCircle, UserRoundCheck, Users } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
-import { useNavigate } from "react-router";
+import { Bot, CalendarCheck, Columns3, Download, List, MessageCircle, UserRoundCheck, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Dialog, Empty, ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useChangeStage, useProspects, useTeam } from "../lib/api";
+import { useChangeStage, useDevelopments, useProspects, useProspectsCsvUrl, useTeam, type ProspectFilters } from "../lib/api";
 import { dateTime, HANDOFF_LABEL, initials, money, num, shortDateTime, STAGE_LABEL, STAGE_ORDER, temperature, timeAgo } from "../lib/format";
 import { useSession } from "../lib/session";
 import type { Prospect, ProspectStage } from "../lib/types";
@@ -17,20 +17,42 @@ export const displayName = (p: Pick<Prospect, "name" | "profileName">) => p.name
 
 type View = "tablero" | "lista";
 
+const FILTER_KEYS = ["q", "development", "temperature", "source", "owner", "from", "to"] as const;
+
 export function Prospectos() {
-  const prospects = useProspects();
   const navigate = useNavigate();
-  const { me } = useSession();
+  const { me, canWrite } = useSession();
   const isSellerUser = me?.user.role === "seller";
   const team = useTeam();
+  const developments = useDevelopments();
   const [view, setView] = useState<View>("tablero");
-  const [owner, setOwner] = useState<string>("all"); // all | none | <userId>
-
-  const visible = useMemo(
-    () =>
-      (prospects.data ?? []).filter((p) => (owner === "all" ? true : owner === "none" ? !p.assignedUserId : p.assignedUserId === owner)),
-    [prospects.data, owner],
-  );
+  // Filtros en la URL: sobreviven al ir a una ficha y volver, y se pueden compartir.
+  const [params, setParams] = useSearchParams();
+  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? undefined])) as ProspectFilters;
+  const setFilter = (key: (typeof FILTER_KEYS)[number], value: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  // La búsqueda espera a que dejes de escribir.
+  const [search, setSearch] = useState(filters.q ?? "");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if ((filters.q ?? "") !== search.trim()) setFilter("q", search.trim());
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filters.q]);
+  const prospects = useProspects(filters);
+  const csvUrl = useProspectsCsvUrl(filters);
+  const items = prospects.data?.items ?? [];
+  const total = prospects.data?.total ?? items.length;
+  const filtered = FILTER_KEYS.some((k) => filters[k]);
 
   return (
     <div className="page" style={{ maxWidth: view === "tablero" ? "none" : undefined }}>
@@ -42,40 +64,92 @@ export function Prospectos() {
             : "Llegan por WhatsApp (o del simulador del agente) y se reparten entre los vendedores. La calificación la calcula el sistema."
         }
         actions={
-          !isSellerUser && (
-            <label className="row" style={{ gap: 8 }}>
-              <span className="muted">Vendedor</span>
-              <select className="select" style={{ width: 220 }} value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Filtrar por vendedor">
-                <option value="all">Todos</option>
-                <option value="none">Sin asignar</option>
-                {team.data
-                  ?.filter((u) => u.active)
-                  .map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+          canWrite && (
+            <a className="btn" href={csvUrl} download>
+              <Download size={16} /> Exportar CSV
+            </a>
           )
         }
       />
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={view === "tablero"} className={`tabs__btn${view === "tablero" ? " active" : ""}`} onClick={() => setView("tablero")}>
-          <Columns3 size={16} /> Tablero
-        </button>
-        <button role="tab" aria-selected={view === "lista"} className={`tabs__btn${view === "lista" ? " active" : ""}`} onClick={() => setView("lista")}>
-          <List size={16} /> Lista
-        </button>
+      <div className="filters" role="search" aria-label="Filtros de prospectos">
+        <input className="input" type="search" placeholder="Buscar por nombre, teléfono o correo" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Buscar prospecto" />
+        <select className="select" value={filters.development ?? ""} onChange={(e) => setFilter("development", e.target.value)} aria-label="Filtrar por desarrollo">
+          <option value="">Todos los desarrollos</option>
+          {developments.data?.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+          <option value="none">Sin desarrollo de interés</option>
+        </select>
+        <select className="select" value={filters.temperature ?? ""} onChange={(e) => setFilter("temperature", e.target.value)} aria-label="Filtrar por calificación">
+          <option value="">Toda calificación</option>
+          <option value="listo">Listo para comprar</option>
+          <option value="caliente">Caliente</option>
+          <option value="tibio">Tibio</option>
+          <option value="frio">Frío</option>
+        </select>
+        <select className="select" value={filters.source ?? ""} onChange={(e) => setFilter("source", e.target.value)} aria-label="Filtrar por origen">
+          <option value="">WhatsApp y simulador</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="simulator">Simulador</option>
+        </select>
+        {!isSellerUser && (
+          <select className="select" value={filters.owner ?? ""} onChange={(e) => setFilter("owner", e.target.value)} aria-label="Filtrar por vendedor">
+            <option value="">Todos los vendedores</option>
+            <option value="none">Sin asignar</option>
+            {team.data
+              ?.filter((u) => u.active)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+          </select>
+        )}
+        <label className="filters__date">
+          <span className="muted">Desde</span>
+          <input className="input" type="date" value={filters.from ?? ""} onChange={(e) => setFilter("from", e.target.value)} aria-label="Primer contacto desde" />
+        </label>
+        <label className="filters__date">
+          <span className="muted">Hasta</span>
+          <input className="input" type="date" value={filters.to ?? ""} onChange={(e) => setFilter("to", e.target.value)} aria-label="Primer contacto hasta" />
+        </label>
+        {filtered && (
+          <button
+            className="btn btn--ghost"
+            onClick={() => {
+              setSearch("");
+              setParams(new URLSearchParams(), { replace: true });
+            }}
+          >
+            <X size={14} /> Limpiar
+          </button>
+        )}
+      </div>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={view === "tablero"} className={`tabs__btn${view === "tablero" ? " active" : ""}`} onClick={() => setView("tablero")}>
+            <Columns3 size={16} /> Tablero
+          </button>
+          <button role="tab" aria-selected={view === "lista"} className={`tabs__btn${view === "lista" ? " active" : ""}`} onClick={() => setView("lista")}>
+            <List size={16} /> Lista
+          </button>
+        </div>
+        {prospects.data && (
+          <span className="muted" aria-live="polite">
+            {total > items.length ? `Mostrando ${num(items.length)} de ${num(total)} — usa los filtros para acotar` : `${num(total)} prospecto${total === 1 ? "" : "s"}`}
+          </span>
+        )}
       </div>
       {prospects.isPending && <Spinner />}
       <ErrorAlert error={prospects.error} />
-      {prospects.data?.length === 0 && (
-        <Empty icon={<Users size={40} />} title="Aún no hay prospectos">
-          Aparecerán aquí en cuanto alguien escriba al número de WhatsApp conectado o pruebes el agente en el simulador.
+      {prospects.data && items.length === 0 && (
+        <Empty icon={<Users size={40} />} title={filtered ? "Ningún prospecto con estos filtros" : "Aún no hay prospectos"}>
+          {filtered ? "Prueba con otros filtros o límpialos." : "Aparecerán aquí en cuanto alguien escriba al número de WhatsApp conectado o pruebes el agente en el simulador."}
         </Empty>
       )}
-      {prospects.data && prospects.data.length > 0 && (view === "tablero" ? <Board prospects={visible} /> : <ProspectTable prospects={visible} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
+      {items.length > 0 && (view === "tablero" ? <Board prospects={items} /> : <ProspectTable prospects={items} onOpen={(p) => navigate(`/prospectos/${p.id}`)} />)}
     </div>
   );
 }

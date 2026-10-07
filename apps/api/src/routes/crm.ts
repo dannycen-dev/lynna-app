@@ -5,6 +5,10 @@ import { canSendWhatsApp } from "../agent/respond";
 import { actorOf, type AuthVariables, type Principal } from "../auth/middleware";
 import { slotLabel } from "../crm/agenda";
 import { advisorEta } from "../crm/business-hours";
+import { computeMetrics } from "../crm/metrics";
+import { listProspects, prospectFilters } from "../crm/prospect-list";
+import { toCsv } from "../lib/csv";
+import { todayIn } from "../financing/dates";
 import { assignProspect, isSeller, prospectScope, tenantUsers } from "../crm/assignment";
 import { getDb, type Db } from "../db/client";
 import {
@@ -528,4 +532,76 @@ crm.patch("/settings/agent", async (c) => {
   ]);
   const t = updated[0]!;
   return c.json({ assistantName: t.assistantName, businessHours: t.businessHours ?? [], timezone: t.timezone, advisorEtaNow: advisorEta(t.businessHours, t.timezone) });
+});
+
+// ── Exportar prospectos (CSV) ──────────────────────────────────────────────────
+
+const STAGE_ES: Record<string, string> = {
+  new: "Nuevo",
+  qualified: "Calificado",
+  appointment: "Cita agendada",
+  visited: "Visitó",
+  negotiation: "Negociación",
+  ready_to_buy: "Listo para comprar",
+  reserved: "Apartado",
+  won: "Vendido",
+  lost: "Perdido",
+};
+
+/** Mismos filtros que la lista. Datos personales: solo gerente, dueño o admin, y queda en el historial. */
+crm.get("/exports/prospects.csv", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente puede exportar prospectos." }, 403);
+  const parsed = prospectFilters.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const db = getDb(c.env.DB);
+  const tz = c.var.tenant.timezone;
+  const { rows, total } = await listProspects(db, c.var.tenant, c.var.principal, parsed.data, 5000);
+  const fecha = (ms: number | null) => (ms ? new Intl.DateTimeFormat("sv-SE", { timeZone: tz, dateStyle: "short", timeStyle: "short" }).format(new Date(ms)) : "");
+  const pesos = (cents: number | null) => (cents ? Math.round(cents / 100) : "");
+  const csv = toCsv([
+    ["Nombre", "Teléfono", "Correo", "Etapa", "Calificación (0-100)", "Desarrollo de interés", "Presupuesto (MXN)", "Enganche (MXN)", "Uso", "Plazo", "Ciudad", "Vendedor", "Turnado a asesor", "Próxima cita", "Origen", "Primer contacto", "Último mensaje", "Autorizó datos financieros", "Pidió baja"],
+    ...rows.map((p) => [
+      p.name ?? p.profileName ?? "",
+      // Sin "+" al inicio (Excel lo tomaría como fórmula) y con espacios para que no lo convierta en número.
+      p.source === "simulator" ? "" : p.phone.replace(/^52(1?)(\d{3})(\d{3})(\d{4})$/, (_, one: string, a: string, b: string, c: string) => `52 ${one ? "1 " : ""}${a} ${b} ${c}`),
+      p.email,
+      STAGE_ES[p.stage] ?? p.stage,
+      p.score,
+      p.developmentName,
+      pesos(p.budgetCents),
+      pesos(p.downPaymentCents),
+      p.purpose,
+      p.timeframe,
+      p.city,
+      p.assignedName,
+      p.handoffReason ?? "",
+      fecha(p.nextAppointmentAt),
+      p.source === "simulator" ? "Simulador" : "WhatsApp",
+      fecha(p.createdAt),
+      fecha(p.lastInboundAt),
+      p.consentAt ? "Sí" : "",
+      p.optedOutAt ? "Sí" : "",
+    ]),
+  ]);
+  await auditInsert(db, {
+    tenantId: c.var.tenant.id,
+    actor: actorOf(c.var.principal),
+    entity: "tenant",
+    entityId: c.var.tenant.id,
+    action: "prospects_exported",
+    data: { filters: parsed.data, rows: rows.length, total },
+  });
+  return c.body(csv, 200, {
+    "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="prospectos-${todayIn(tz)}.csv"`,
+    "x-total-count": String(total),
+  });
+});
+
+// ── Métricas ───────────────────────────────────────────────────────────────────
+
+crm.get("/metrics", async (c) => {
+  const days = Number(c.req.query("days") ?? 30);
+  if (![7, 30, 90].includes(days)) return c.json({ error: "validation", message: "days debe ser 7, 30 o 90." }, 400);
+  return c.json(await computeMetrics(getDb(c.env.DB), c.var.tenant, c.var.principal, days));
 });

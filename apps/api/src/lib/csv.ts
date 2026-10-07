@@ -58,3 +58,17 @@ export function normalizeHeader(header: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
 }
+
+/**
+ * Celdas → CSV para Excel: BOM UTF-8 (acentos correctos), CRLF y comillas cuando hace falta. Las celdas que
+ * empiezan con = + - @ se prefijan con ' para que Excel no las ejecute como fórmula (inyección CSV).
+ */
+export function toCsv(rows: (string | number | null | undefined)[][]): string {
+  const cell = (v: string | number | null | undefined) => {
+    if (v === null || v === undefined) return "";
+    let s = String(v);
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return `﻿${rows.map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
+}

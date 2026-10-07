@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BookOpen,
   Bot,
   Building2,
@@ -32,6 +33,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { to: "/conocimiento", label: "Base de conocimiento", icon: <BookOpen size={18} /> },
       { to: "/conversaciones", label: "WhatsApp", icon: <MessageCircle size={18} />, soon: true },
       { to: "/citas", label: "Citas", icon: <CalendarCheck size={18} /> },
+      { to: "/metricas", label: "Métricas", icon: <BarChart3 size={18} /> },
     ],
   },
   {

@@ -27,12 +27,12 @@ function describe(status: number, body: Record<string, unknown> | null): string 
   return "Ocurrió un error inesperado. Intenta de nuevo.";
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}): Promise<{ body: T; headers: Headers }> {
   const headers = new Headers(init.headers);
   if (init.body && typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
 
   const res = await fetch(path, { ...init, headers, credentials: "same-origin" });
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return { body: undefined as T, headers: res.headers };
   const text = await res.text();
   let body: unknown = null;
   try {
@@ -44,5 +44,16 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     const obj = (body && typeof body === "object" ? body : null) as Record<string, unknown> | null;
     throw new ApiError(res.status, String(obj?.error ?? res.status), describe(res.status, obj), body);
   }
-  return body as T;
+  return { body: body as T, headers: res.headers };
+}
+
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await request<T>(path, init)).body;
+}
+
+/** Igual que apiFetch, más el total que manda la API en `x-total-count` (listas con límite). */
+export async function apiFetchWithTotal<T>(path: string, init: RequestInit = {}): Promise<{ items: T; total: number | null }> {
+  const { body, headers } = await request<T>(path, init);
+  const total = headers.get("x-total-count");
+  return { items: body, total: total === null ? null : Number(total) };
 }
