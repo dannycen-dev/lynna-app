@@ -4,6 +4,7 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  TenantUsage,
   FollowupSettings,
   ManagedUser,
   UsersResponse,
@@ -537,3 +538,9 @@ export function usePauseFollowups() {
     onSuccess: () => invalidate("prospect"),
   });
 }
+
+// ── Consumo ───────────────────────────────────────────────────────────────────
+
+export const useTenantUsage = (month: string) => useApiQuery<{ month: string; usage: TenantUsage }>(["usage", month], `/usage?month=${month}`);
+export const useAllUsage = (month: string, enabled: boolean) =>
+  useApiQuery<{ month: string; tenants: TenantUsage[] }>(["usage-all", month], enabled ? `/api/admin/usage?month=${month}` : null);

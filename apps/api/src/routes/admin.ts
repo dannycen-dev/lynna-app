@@ -29,6 +29,7 @@ import { log } from "../lib/log";
 import { deleteMedia, uploadMedia } from "./media";
 import { prospectScope } from "../crm/assignment";
 import { listProspects, prospectFilters } from "../crm/prospect-list";
+import { computeUsage, USD_PER_1000_NEURONS } from "../crm/usage";
 import { agenda } from "./agenda";
 import { knowledge } from "./knowledge";
 import { userAdmin } from "./users";
@@ -55,6 +56,15 @@ admin.onError((err, c) => {
 admin.get("/tenants", async (c) => {
   const rows = await getDb(c.env.DB).select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).orderBy(asc(tenants.name));
   return c.json(rows.filter((t) => canAccessTenant(c.var.principal, t.id)));
+});
+
+// Consumo de todas las desarrolladoras (solo Ignia): para facturar IA al costo.
+admin.get("/usage", async (c) => {
+  const p = c.var.principal;
+  if (!(p.kind === "token" || p.user.role === "admin")) return c.json({ error: "forbidden" }, 403);
+  const month = c.req.query("month") ?? new Date().toISOString().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: "validation", message: "month debe ser YYYY-MM." }, 400);
+  return c.json({ month, usdPer1000Neurons: USD_PER_1000_NEURONS, tenants: await computeUsage(getDb(c.env.DB), month) });
 });
 
 admin.use("/tenants/:tenant/*", async (c, next) => {
@@ -353,6 +363,16 @@ admin.get("/tenants/:tenant/developments/:development/payment-plans", async (c) 
 });
 
 // ── Prospectos (base del CRM de la Fase 4) ─────────────────────────────────────
+
+// Consumo del mes de esta desarrolladora (dueño, gerente o Ignia; el vendedor no).
+admin.get("/tenants/:tenant/usage", async (c) => {
+  const p = c.var.principal;
+  if (p.kind === "user" && p.user.role === "seller") return c.json({ error: "forbidden" }, 403);
+  const month = c.req.query("month") ?? new Date().toISOString().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: "validation", message: "month debe ser YYYY-MM." }, 400);
+  const [usage] = await computeUsage(getDb(c.env.DB), month, c.var.tenant.id);
+  return c.json({ month, usdPer1000Neurons: USD_PER_1000_NEURONS, usage });
+});
 
 admin.get("/tenants/:tenant/prospects", async (c) => {
   const parsed = prospectFilters.safeParse(c.req.query());

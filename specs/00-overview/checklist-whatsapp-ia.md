@@ -297,7 +297,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] **Usuarios desde el panel**: alta con contraseña temporal (se muestra una vez; el servidor bloquea la API hasta cambiarla), roles (dueño administra todo; gerente solo vendedores), desactivar/reactivar (cierra sesiones y avisa cuántos prospectos tenía), restablecer contraseña y "Mi cuenta" para cambiar la propia. Siempre queda un dueño activo; nadie se desactiva a sí mismo. — _2026-10-07, dev_
 - [x] **Apartado vencido**: avisos 24 h antes y al liberarse (§2.11). — _2026-10-07, dev_
 - [x] **Seguimientos automáticos** (§2.7): secuencia configurable (hasta 5 pasos, espera y texto con {nombre}/{desarrollo}); se detiene si responde (y reinicia después), agenda cita, pide baja, se turna, un asesor la toma, la pausan o ya apartó/compró/perdió; solo en horario de oficina. Cron cada 15 min en lugar de Workflows (más simple, mismo resultado). — _2026-10-07, dev; el envío real (plantilla de marketing de Meta) llega con WhatsApp: hoy quedan "simulados" en la conversación_
-- [ ] Avisos en tiempo real (Durable Object + WebSocket) en lugar de consulta cada 10 s.
+- [ ] ~~Avisos en tiempo real (Durable Object + WebSocket)~~ — _decisión 2026-10-07: no por ahora. La campana consulta cada 10 s solo con la pestaña visible (un "quiere comprar" llega en ≤10 s); WebSocket exigiría notificar al DO desde los 7 lugares que crean avisos. Reconsiderar si el volumen o la urgencia lo piden._
 - [ ] Agenda, mejoras: varios horarios por día por vendedor, días festivos/bloqueos (vacaciones), sincronizar con Google Calendar.
 
 ### Al final: WhatsApp real (Fase 2)
@@ -319,4 +319,4 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
   - [ ] Contrato de encargo desarrolladora ↔ Ignia (datos, finalidad, plazo, borrado). — _legal_
   - [x] ARCO desde el panel: exportar (JSON) y eliminar todos los datos de un prospecto (gerente/dueño; queda constancia sin datos personales). — _2026-10-07, dev_
   - [ ] Regla: solo IA que no entrene con los datos (Workers AI, incluidos modelos chinos alojados en Cloudflare, o Claude); nunca APIs directas de DeepSeek/Kimi.
-- [ ] Medir el consumo de IA por cliente (AI Gateway o neuronas por desarrolladora) para facturarlo al costo: **Ignia no absorbe IA ni WhatsApp**, los paga el cliente.
+- [x] Medir el consumo de IA por cliente para facturarlo al costo: página **Consumo** (mes; Ignia ve todas, dueño/gerente la suya): respuestas de la IA, neuronas y su costo (USD 0.011/1,000), estimación de WhatsApp (plantillas + respuestas después de 1,000). Excluye el simulador. — _2026-10-07, dev_

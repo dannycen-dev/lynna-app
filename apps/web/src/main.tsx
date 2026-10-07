@@ -8,6 +8,7 @@ import { Agenda } from "./pages/Agenda";
 import { Metricas } from "./pages/Metricas";
 import { Cuenta, ForcedPasswordChange } from "./pages/Cuenta";
 import { Usuarios } from "./pages/Usuarios";
+import { Consumo } from "./pages/Consumo";
 import { CotizadorDevelopments, CotizadorLot, CotizadorLots } from "./pages/Cotizador";
 import { Configuracion } from "./pages/Configuracion";
 import { Conocimiento } from "./pages/Conocimiento";
@@ -79,6 +80,7 @@ const router = createBrowserRouter([
       { path: "conocimiento", element: <Conocimiento /> },
       { path: "ajustes", element: <Configuracion /> },
       { path: "usuarios", element: <Usuarios /> },
+      { path: "consumo", element: <Consumo /> },
       { path: "cuenta", element: <Cuenta /> },
       { path: "*", element: <div className="page"><Empty title="Página no encontrada" /></div> },
     ],

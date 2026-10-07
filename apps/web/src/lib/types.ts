@@ -393,3 +393,17 @@ export type FollowupStatus =
   | { state: "stopped"; reason: string }
   | { state: "done"; step: number; total: number }
   | { state: "waiting"; step: number; total: number; nextAt: number };
+
+export type TenantUsage = {
+  tenantId: string;
+  name: string;
+  slug: string;
+  aiReplies: number;
+  neurons: number;
+  aiUsd: number;
+  conversations: number;
+  inbound: number;
+  outboundReplies: number;
+  templates: number;
+  whatsappMxnEstimate: number;
+};

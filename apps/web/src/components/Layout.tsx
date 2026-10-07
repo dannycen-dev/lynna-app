@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Gauge,
   BookOpen,
   Bot,
   Building2,
@@ -49,6 +50,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { to: "/ajustes", label: "Configuración", icon: <Settings size={18} /> },
       { to: "/usuarios", label: "Usuarios", icon: <UserCog size={18} />, hideForSeller: true },
+      { to: "/consumo", label: "Consumo", icon: <Gauge size={18} />, hideForSeller: true },
     ],
   },
 ];
