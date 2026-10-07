@@ -145,7 +145,7 @@ export function useChangeLotStatus() {
   const { call } = useApi();
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: ({ lotId, ...data }: { lotId: string; status: LotStatus; reason: string; reservedUntil?: string }) =>
+    mutationFn: ({ lotId, ...data }: { lotId: string; status: LotStatus; reason: string; reservedUntil?: string; prospectId?: string | null }) =>
       call<Lot>(`/lots/${encodeURIComponent(lotId)}/status`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => invalidate("lots", "summary", "simulate"),
   });

@@ -101,6 +101,10 @@ export const lots = sqliteTable(
     // Solo un humano cambia el estado (desde el panel, con auditoría). La IA solo lo lee.
     status: text("status", { enum: LOT_STATUSES }).notNull().default("available"),
     reservedUntil: integer("reserved_until"),
+    // Quién lo apartó y para qué prospecto: a ellos se les avisa antes de que venza y cuando se libera.
+    reservedByUserId: text("reserved_by_user_id"),
+    reservedForProspectId: text("reserved_for_prospect_id"),
+    reservationWarnedAt: integer("reservation_warned_at"),
     features: text("features"),
     geojson: text("geojson"),
     updatedAt: updatedAt(),
@@ -399,7 +403,7 @@ export const notifications = sqliteTable(
     tenantId: tenantId(),
     userId: text("user_id").references(() => users.id),
     prospectId: text("prospect_id").references(() => prospects.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["handoff", "assignment", "appointment", "system"] }).notNull(),
+    kind: text("kind", { enum: ["handoff", "assignment", "appointment", "reservation", "system"] }).notNull(),
     title: text("title").notNull(),
     body: text("body"),
     createdAt: createdAt(),

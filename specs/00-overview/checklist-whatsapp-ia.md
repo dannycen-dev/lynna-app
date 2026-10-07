@@ -120,7 +120,7 @@
 ### 2.11 Control de disponibilidad de terrenos
 - [x] Estados de lote: `disponible`, `apartado`, `vendido`, `bloqueado`; cambios **solo por humanos** desde el panel, con auditoría. — _desde el panel (Inventario → Cambiar estado), con motivo y auditoría_
 - [x] La IA consulta disponibilidad **en cada respuesta** que mencione un lote (sin caché en el prompt).
-- [ ] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor. — _cron cada 15 min ya libera y audita; falta el aviso al vendedor (Fase 4)_
+- [x] Apartado con fecha de vencimiento → cron que lo libera y avisa al vendedor. — _2026-10-07: el lote guarda quién lo apartó y para qué prospecto (que pasa a "Apartado"); aviso 24 h antes para extenderlo y aviso al liberarse (a quien apartó y al vendedor del prospecto; si no hay nadie, al equipo)_
 - [x] Importación masiva de inventario (CSV/Excel) para cargar los proyectos del cliente. — _CSV con encabezados en español, `dryRun`, todo o nada_
 - **Acepta:** un lote marcado `vendido` desaparece de las respuestas de la IA al instante.
 
@@ -295,7 +295,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] **CRM**: filtros en el servidor (búsqueda por nombre/teléfono/correo, desarrollo, calificación, origen, vendedor, fechas; en la URL), exportar CSV (gerente/dueño; protegido contra fórmulas de Excel; queda en el historial) y página **Métricas** (embudo por la etapa más avanzada, respuesta de la IA, tiempo hasta que atiende un asesor, citas y asistencia, motivos de traspaso y de pérdida, por vendedor; 7/30/90 días). — _2026-10-07, dev_
 - [ ] CRM, mejoras: el tablero carga hasta 500 prospectos (avisa si hay más); paginar/virtualizar cuando el volumen real lo pida. Tiempo de atención de asesores en horas hábiles (hoy cuenta noches y fines de semana).
 - [x] **Usuarios desde el panel**: alta con contraseña temporal (se muestra una vez; el servidor bloquea la API hasta cambiarla), roles (dueño administra todo; gerente solo vendedores), desactivar/reactivar (cierra sesiones y avisa cuántos prospectos tenía), restablecer contraseña y "Mi cuenta" para cambiar la propia. Siempre queda un dueño activo; nadie se desactiva a sí mismo. — _2026-10-07, dev_
-- [ ] **Apartado vencido**: avisar al vendedor cuando el cron libera un lote (§2.11).
+- [x] **Apartado vencido**: avisos 24 h antes y al liberarse (§2.11). — _2026-10-07, dev_
 - [ ] **Seguimientos automáticos** (§2.7): secuencias con Workflows; el envío real depende de WhatsApp.
 - [ ] Avisos en tiempo real (Durable Object + WebSocket) en lugar de consulta cada 10 s.
 - [ ] Agenda, mejoras: varios horarios por día por vendedor, días festivos/bloqueos (vacaciones), sincronizar con Google Calendar.

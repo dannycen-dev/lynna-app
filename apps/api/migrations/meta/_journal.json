@@ -78,6 +78,13 @@
       "when": 1791347749954,
       "tag": "0010_user_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1791348816281,
+      "tag": "0011_reservations",
+      "breakpoints": true
     }
   ]
 }

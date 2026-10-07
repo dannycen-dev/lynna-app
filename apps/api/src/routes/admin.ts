@@ -240,6 +240,7 @@ const statusBody = z.object({
   status: z.enum(LOT_STATUSES),
   reason: z.string().trim().min(3, "indique el motivo").max(500),
   reservedUntil: z.iso.datetime({ offset: true }).optional(),
+  prospectId: z.string().min(1).max(80).nullish(),
 });
 
 admin.patch("/tenants/:tenant/lots/:lotId/status", async (c) => {

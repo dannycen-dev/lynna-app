@@ -1,6 +1,6 @@
-import { and, asc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { developments, lots, paymentPlans, type LotStatus } from "../db/schema";
+import { developments, lots, notifications, paymentPlans, prospects, tenants, type LotStatus } from "../db/schema";
 import { simulatePlan, type Simulation } from "../financing";
 import { auditInsert } from "../lib/audit";
 
@@ -87,7 +87,11 @@ export type StatusChange = {
   reason: string;
   /** Obligatorio al apartar: epoch ms en el futuro. */
   reservedUntil?: number;
+  /** Al apartar: para qué prospecto (se le avisa a su vendedor y el prospecto pasa a "Apartado"). */
+  prospectId?: string | null;
 };
+
+const STAGE_RANK = ["new", "qualified", "appointment", "visited", "negotiation", "ready_to_buy", "reserved", "won"];
 
 /** Cambio de estado hecho por un humano (actor), con auditoría en la misma transacción. */
 export async function changeLotStatus(db: Db, tenantId: string, lotId: string, change: StatusChange, actor: string) {
@@ -99,12 +103,28 @@ export async function changeLotStatus(db: Db, tenantId: string, lotId: string, c
   if (lot.status === change.status && change.status !== "reserved") {
     throw new CatalogError("invalid_transition", `El lote ya está en estado ${change.status}.`);
   }
+  const reserving = change.status === "reserved";
+  const prospect =
+    reserving && change.prospectId
+      ? await db.select({ id: prospects.id, stage: prospects.stage }).from(prospects).where(and(eq(prospects.id, change.prospectId), eq(prospects.tenantId, tenantId))).get()
+      : undefined;
+  if (reserving && change.prospectId && !prospect) throw new CatalogError("not_found", "Prospecto no encontrado.");
 
-  const reservedUntil = change.status === "reserved" ? change.reservedUntil! : null;
+  const reservedUntil = reserving ? change.reservedUntil! : null;
+  const now = Date.now();
+  // El prospecto avanza a "Apartado" (si no estaba ya más adelante).
+  const advance = prospect && prospect.stage !== "lost" && STAGE_RANK.indexOf(prospect.stage) < STAGE_RANK.indexOf("reserved");
   const [updated] = await db.batch([
     db
       .update(lots)
-      .set({ status: change.status, reservedUntil, updatedAt: Date.now() })
+      .set({
+        status: change.status,
+        reservedUntil,
+        reservedByUserId: reserving && actor.startsWith("user:") ? actor.slice(5) : null,
+        reservedForProspectId: reserving ? (prospect?.id ?? null) : null,
+        reservationWarnedAt: null,
+        updatedAt: now,
+      })
       .where(eq(lots.id, lot.id))
       .returning(),
     auditInsert(db, {
@@ -113,38 +133,120 @@ export async function changeLotStatus(db: Db, tenantId: string, lotId: string, c
       entity: "lot",
       entityId: lot.id,
       action: "status_change",
-      data: { from: lot.status, to: change.status, reason: change.reason, reservedUntil },
+      data: { from: lot.status, to: change.status, reason: change.reason, reservedUntil, ...(prospect ? { prospectId: prospect.id } : {}) },
     }),
+    ...(advance
+      ? [
+          db.update(prospects).set({ stage: "reserved", updatedAt: now }).where(eq(prospects.id, prospect.id)),
+          auditInsert(db, {
+            tenantId,
+            actor,
+            entity: "prospect",
+            entityId: prospect.id,
+            action: "stage_change",
+            data: { from: prospect.stage, to: "reserved", reason: `Apartó Manzana ${lot.block}, lote ${lot.number}` },
+          }),
+        ]
+      : []),
   ]);
   return updated[0]!;
 }
 
 /** Cron: libera apartados vencidos. Devuelve los lotes liberados. */
-export async function releaseExpiredReservations(db: Db, now = Date.now()) {
-  const expired = await db
-    .select({ id: lots.id, tenantId: lots.tenantId, reservedUntil: lots.reservedUntil })
+/** Apartados vigentes o vencidos, con lo necesario para avisar (quién apartó, para quién, zona horaria). */
+function reservationRows(db: Db) {
+  return db
+    .select({
+      id: lots.id,
+      tenantId: lots.tenantId,
+      block: lots.block,
+      number: lots.number,
+      reservedUntil: lots.reservedUntil,
+      reservedByUserId: lots.reservedByUserId,
+      prospectId: lots.reservedForProspectId,
+      prospectName: sql<string | null>`coalesce(${prospects.name}, ${prospects.profileName})`,
+      sellerId: prospects.assignedUserId,
+      timezone: tenants.timezone,
+    })
     .from(lots)
-    .where(and(eq(lots.status, "reserved"), lt(lots.reservedUntil, now)));
+    .innerJoin(tenants, eq(tenants.id, lots.tenantId))
+    .leftJoin(prospects, eq(prospects.id, lots.reservedForProspectId));
+}
+
+type ReservationRow = {
+  id: string;
+  tenantId: string;
+  block: string;
+  number: string;
+  reservedUntil: number | null;
+  reservedByUserId: string | null;
+  prospectId: string | null;
+  prospectName: string | null;
+  sellerId: string | null;
+  timezone: string;
+};
+
+/** Avisos para quien apartó y para el vendedor del prospecto; si no hay nadie, para todo el equipo. */
+function reservationNotices(db: Db, r: ReservationRow, title: string, body: string, now: number) {
+  const recipients = [...new Set([r.reservedByUserId, r.sellerId].filter((x): x is string => Boolean(x)))];
+  return (recipients.length ? recipients : [null]).map((userId) =>
+    db.insert(notifications).values({ tenantId: r.tenantId, userId, prospectId: r.prospectId, kind: "reservation", title, body, createdAt: now }),
+  );
+}
+
+const when = (ms: number, timeZone: string) =>
+  new Intl.DateTimeFormat("es-MX", { timeZone, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms));
+
+/** Cron: libera los apartados vencidos (el lote vuelve a "disponible" y la IA lo puede ofrecer) y avisa. */
+export async function releaseExpiredReservations(db: Db, now = Date.now()) {
+  const expired = await reservationRows(db).where(and(eq(lots.status, "reserved"), lt(lots.reservedUntil, now)));
   if (expired.length === 0) return [];
 
   await db.batch([
     db
       .update(lots)
-      .set({ status: "available", reservedUntil: null, updatedAt: now })
+      .set({ status: "available", reservedUntil: null, reservedByUserId: null, reservedForProspectId: null, reservationWarnedAt: null, updatedAt: now })
       // Misma condición que el SELECT (sin lista de IDs: D1 limita a 100 parámetros por consulta).
       .where(and(eq(lots.status, "reserved"), lt(lots.reservedUntil, now))),
-    ...expired.map((l) =>
+    ...expired.flatMap((l) => [
       auditInsert(db, {
         tenantId: l.tenantId,
         actor: "system",
         entity: "lot",
         entityId: l.id,
         action: "reservation_expired",
-        data: { reservedUntil: l.reservedUntil },
+        data: { reservedUntil: l.reservedUntil, prospectId: l.prospectId },
       }),
-    ),
+      ...reservationNotices(
+        db,
+        l,
+        `Se liberó el apartado: Manzana ${l.block}, lote ${l.number}`,
+        `${l.prospectName ? `Era para ${l.prospectName}. ` : ""}Venció el ${when(l.reservedUntil!, l.timezone)}. Ya está disponible y la IA lo puede ofrecer.`,
+        now,
+      ),
+    ]),
   ]);
   return expired;
+}
+
+/** Cron: avisa una vez, 24 h antes, de los apartados que están por vencer (para extenderlos si sigue el trámite). */
+export async function warnExpiringReservations(db: Db, now = Date.now()) {
+  const soon = await reservationRows(db).where(
+    and(eq(lots.status, "reserved"), gte(lots.reservedUntil, now), lte(lots.reservedUntil, now + 24 * 60 * 60 * 1000), isNull(lots.reservationWarnedAt)),
+  );
+  for (const l of soon) {
+    await db.batch([
+      db.update(lots).set({ reservationWarnedAt: now }).where(eq(lots.id, l.id)),
+      ...reservationNotices(
+        db,
+        l,
+        `Vence pronto el apartado: Manzana ${l.block}, lote ${l.number}`,
+        `${l.prospectName ? `Es para ${l.prospectName}. ` : ""}Vence el ${when(l.reservedUntil!, l.timezone)}. Si el trámite sigue, extiéndelo en Inventario.`,
+        now,
+      ),
+    ]);
+  }
+  return soon.length;
 }
 
 export async function getDevelopmentBySlug(db: Db, tenantId: string, slug: string) {

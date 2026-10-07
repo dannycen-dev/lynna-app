@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { releaseExpiredReservations } from "./catalog/service";
+import { releaseExpiredReservations, warnExpiringReservations } from "./catalog/service";
 import { getDb } from "./db/client";
 import { schemaStatus } from "./db/schema-version";
 import { log } from "./lib/log";
@@ -42,6 +42,8 @@ export default {
     const db = getDb(env.DB);
     const released = await releaseExpiredReservations(db);
     if (released.length > 0) log("info", "cron.reservations_released", { count: released.length });
+    const warned = await warnExpiringReservations(db);
+    if (warned > 0) log("info", "cron.reservations_warned", { count: warned });
     const reassigned = await reassignStale(db);
     if (reassigned.length > 0) log("info", "cron.prospects_reassigned", { count: reassigned.length });
     const reminded = await remindSellers(db);

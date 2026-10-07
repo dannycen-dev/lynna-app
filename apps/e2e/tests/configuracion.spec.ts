@@ -29,7 +29,7 @@ test("configuración: nombre del asistente y horario de atención (qué promete 
   await card.getByLabel(`Oficina abierta el ${day}`).check();
   await card.getByRole("button", { name: "Guardar" }).click();
   await expect(card.getByText("Guardado")).toBeVisible();
-  await expect(preview).toContainText(/"Un asesor te contactará el \w+ \d{1,2} de \w+ a partir de las 9:00\."/);
+  await expect(preview).toContainText(/"Un asesor te contactará el \p{L}+ \d{1,2} de \p{L}+ a partir de las 9:00\."/u);
 
   // El simulador ya se presenta con el nuevo nombre.
   await page.goto("/agente");

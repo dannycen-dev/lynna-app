@@ -21,7 +21,29 @@ const CSV = [
 
 beforeEach(async () => {
   await env.DB.batch(
-    ["audit_log", "lot_media", "lots", "payment_plans", "developments", "messages", "conversations", "prospects", "wa_accounts", "tenants"].map((t) =>
+    // Todo lo que depende de tenants, en orden de llaves foráneas (otros archivos de prueba dejan filas).
+    [
+      "notification_reads",
+      "notifications",
+      "sessions",
+      "login_attempts",
+      "prospect_notes",
+      "appointments",
+      "availability_rules",
+      "kb_articles",
+      "ai_audit_log",
+      "audit_log",
+      "lot_media",
+      "lots",
+      "payment_plans",
+      "messages",
+      "conversations",
+      "prospects",
+      "developments",
+      "users",
+      "wa_accounts",
+      "tenants",
+    ].map((t) =>
       env.DB.prepare(`DELETE FROM ${t}`),
     ),
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useChangeLotStatus } from "../lib/api";
+import { useChangeLotStatus, useProspects } from "../lib/api";
 import { STATUS_LABEL } from "../lib/format";
 import type { Lot, LotStatus } from "../lib/types";
 import { Dialog, ErrorAlert, StatusBadge } from "./ui";
@@ -16,12 +16,20 @@ export function LotStatusDialog({ lot, onClose }: { lot: Lot | null; onClose: ()
   const [status, setStatus] = useState<LotStatus>("reserved");
   const [reason, setReason] = useState("");
   const [until, setUntil] = useState(defaultReservationEnd);
+  const [prospectId, setProspectId] = useState("");
+  const prospects = useProspects();
+  // Prospectos abiertos, por nombre (los vendidos y perdidos no apartan).
+  const candidates = (prospects.data?.items ?? [])
+    .filter((p) => p.stage !== "won" && p.stage !== "lost")
+    .map((p) => ({ id: p.id, name: p.name ?? p.profileName ?? "Sin nombre", seller: p.assignedName }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
   useEffect(() => {
     if (lot) {
       setStatus(lot.status === "available" ? "reserved" : "available");
       setReason("");
       setUntil(defaultReservationEnd());
+      setProspectId("");
       mutation.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -35,7 +43,7 @@ export function LotStatusDialog({ lot, onClose }: { lot: Lot | null; onClose: ()
         lotId: lot.id,
         status,
         reason,
-        ...(status === "reserved" ? { reservedUntil: new Date(until).toISOString() } : {}),
+        ...(status === "reserved" ? { reservedUntil: new Date(until).toISOString(), prospectId: prospectId || null } : {}),
       },
       { onSuccess: onClose },
     );
@@ -73,7 +81,22 @@ export function LotStatusDialog({ lot, onClose }: { lot: Lot | null; onClose: ()
         <div className="field">
           <label htmlFor="lot-until">Apartado vence</label>
           <input id="lot-until" className="input" type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} />
-          <span className="field__hint">Al vencer, el sistema lo libera solo y queda registrado.</span>
+          <span className="field__hint">Un día antes se avisa para extenderlo; al vencer, el sistema lo libera solo y avisa.</span>
+        </div>
+      )}
+      {status === "reserved" && (
+        <div className="field">
+          <label htmlFor="lot-prospect">Para el prospecto (opcional)</label>
+          <select id="lot-prospect" className="select" value={prospectId} onChange={(e) => setProspectId(e.target.value)}>
+            <option value="">— Sin prospecto —</option>
+            {candidates.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.seller ? ` · ${p.seller}` : ""}
+              </option>
+            ))}
+          </select>
+          <span className="field__hint">Pasa a la etapa "Apartado" y su vendedor recibe los avisos de vencimiento.</span>
         </div>
       )}
       <div className="field">

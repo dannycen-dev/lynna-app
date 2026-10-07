@@ -78,7 +78,8 @@ describe("horario de atención en el agente", () => {
     expect(prompt).toContain("la oficina de ventas está cerrada");
     // La red de seguridad turnó y agregó la promesa con la hora real de apertura.
     expect(r.escalation).toBe("compra");
-    expect(r.reply).toMatch(/Un asesor te contactará el \w+ \d{1,2} de \w+ a partir de las 9:00 para ayudarte con eso\./);
+    // \p{L}: "sábado" y "miércoles" llevan acento (\w no los reconoce).
+    expect(r.reply).toMatch(/Un asesor te contactará el \p{L}+ \d{1,2} de \p{L}+ a partir de las 9:00 para ayudarte con eso\./u);
   });
 
   it("el modelo puede repetir la hora de apertura (dato del sistema) y el respaldo también la usa", async () => {
