@@ -41,7 +41,7 @@
 - [x] Ningún secreto en el repo; `.dev.vars.example` documentado.
 - [x] Migraciones D1 solo vía Drizzle; nunca SQL a mano en prod.
 - [x] Logs estructurados en JSON **sin PII** (teléfono enmascarado, sin contenido de documentos).
-- [ ] Cada cambio de estado importante (lote, prospecto, cita) queda en tabla `audit_log`. — _lotes, planes y media ya auditan; prospectos y citas con su fase_
+- [x] Cada cambio de estado importante (lote, prospecto, cita) queda en tabla `audit_log`. — _lotes, planes, media, etapas de prospecto, citas, apartados, seguimientos, usuarios y días libres_
 - [x] Idempotencia en todo lo que venga de Meta (dedupe por `wamid`).
 
 ---
@@ -242,7 +242,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 
 ## 8. Paso a producción (Cloudflare)
 
-- [ ] `wrangler.jsonc` con entornos `dev`, `staging`, `production`.
+- [x] `wrangler.jsonc` con entornos `dev`, `stg`, `prod` (más local en el nivel superior).
 - [ ] D1, R2, Queues, KV, Vectorize, AI Gateway creados por entorno.
 - [ ] Secretos con `wrangler secret` / Secrets Store.
 - [ ] Dominio (p. ej. `app.lynna.mx`) y URL pública del webhook registrada en Meta.
