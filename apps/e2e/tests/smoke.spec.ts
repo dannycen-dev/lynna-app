@@ -40,7 +40,8 @@ test.describe("smoke @smoke", () => {
 
   test("la interfaz carga y pide iniciar sesión", async ({ page }) => {
     await page.goto("/cotizador");
-    await expect(page).toHaveURL(/\/login$/);
+    // Justo después de un deploy, la primera carga (HTML + JS + /me) puede tardar más de 5 s.
+    await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: "Lynna" })).toBeVisible();
     await expect(page.getByLabel("Correo")).toBeVisible();
     await expect(page.getByLabel("Contraseña", { exact: true })).toBeVisible();

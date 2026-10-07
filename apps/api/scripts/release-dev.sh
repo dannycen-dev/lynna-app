@@ -25,7 +25,12 @@ pnpm exec wrangler deploy --env dev
 
 for attempt in 1 2 3 4 5; do
   health=$(curl -fsS https://devlynna.igniastudio.mx/health || true)
-  if grep -q '"ok":true' <<<"$health"; then echo "✔ dev sano: $health"; exit 0; fi
+  if grep -q '"ok":true' <<<"$health"; then
+    # Calentar: la primera carga tras el deploy (HTML, JS, /api/auth/me) es la lenta.
+    for path in / /login /api/auth/me; do curl -s -o /dev/null https://devlynna.igniastudio.mx$path || true; done
+    echo "✔ dev sano: $health"
+    exit 0
+  fi
   sleep 3
 done
 echo "✘ /health no respondió bien: $health"
