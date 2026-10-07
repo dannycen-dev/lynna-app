@@ -45,6 +45,17 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
   },
   { reason: "legal", patterns: [/\babogado\b/, /\blegal(es|mente)?\b/, /\bdemanda\b/, /\bejido\b/, /\bregimen de propiedad\b/] },
   { reason: "queja", patterns: [/\bqueja\b/, /\b(fraude|estafa)\b/, /\bpesimo\b/, /\bmolest[oa]\b/, /\bprofeco\b/] },
+  {
+    // Pide hablar con una persona: se le da, aunque no sea un tema de los que el cliente pidió turnar.
+    reason: "otro",
+    patterns: [
+      /\b(hablar|comunicarme|platicar) con (un|una|algun|alguna|el|la|tu|su)? ?(asesor|asesora|vendedor|vendedora|persona|humano|ejecutivo|ejecutiva|gerente)\b/,
+      /\b(me|nos) (puede|pueden|puedes|podria|podrian|podrias) (marcar|llamar|contactar|hablar)\b/,
+      /\b(quiero|necesito|prefiero) (un|una|que me atienda un|que me atienda una|que me llame un|que me llame una) (asesor|asesora|vendedor|vendedora|persona|humano)\b/,
+      /\b(pasame|comunicame|comunicarme) con\b/,
+      /\bllamenme\b|\bmarquenme\b/,
+    ],
+  },
 ];
 
 export function detectEscalation(text: string): EscalationReason | null {

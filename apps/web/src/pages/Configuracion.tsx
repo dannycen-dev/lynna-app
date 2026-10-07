@@ -1,9 +1,11 @@
-import { CalendarClock, ShieldCheck, Shuffle, Users } from "lucide-react";
+import { Bot, CalendarClock, ShieldCheck, Shuffle, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import {
   useAssignmentSettings,
+  useAgentSettings,
   useAvailability,
+  useSaveAgentSettings,
   usePrivacySettings,
   useSavePrivacySettings,
   useSaveAppointmentSettings,
@@ -12,7 +14,8 @@ import {
   useUpdateAssignmentSettings,
   useUpdateTeamMember,
 } from "../lib/api";
-import { minutesToTime, ROLE_LABEL, timeAgo, timeToMinutes, WEEKDAY_LABEL } from "../lib/format";
+import { ROLE_LABEL, timeAgo } from "../lib/format";
+import { useWeekHours, WeekHoursGrid } from "../components/WeekHours";
 import type { AvailabilityRule } from "../lib/types";
 import { useSession } from "../lib/session";
 
@@ -23,6 +26,7 @@ export function Configuracion() {
       <PageHeader title="Configuración" subtitle="Cómo se reparten los prospectos y cuándo recibe visitas tu equipo." />
       {!canWrite && <div className="alert alert--info" style={{ marginBottom: 16 }}>Solo un gerente o dueño puede cambiar el reparto. Tu horario de citas sí lo puedes ajustar.</div>}
       <div className="stack">
+        <AgentCard disabled={!canWrite} />
         <AssignmentCard disabled={!canWrite} />
         <TeamCard disabled={!canWrite} />
         <AvailabilityCard canWrite={canWrite} />
@@ -159,20 +163,6 @@ function TeamCard({ disabled }: { disabled: boolean }) {
   );
 }
 
-// Lunes primero, como se lee una semana de trabajo.
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-
-type DayDraft = { on: boolean; start: string; end: string };
-
-function toDraft(rules: AvailabilityRule[]): Record<number, DayDraft> {
-  const draft: Record<number, DayDraft> = {};
-  for (const d of WEEK_ORDER) {
-    const r = rules.find((x) => x.weekday === d);
-    draft[d] = r ? { on: true, start: minutesToTime(r.startMinute), end: minutesToTime(r.endMinute) } : { on: false, start: "09:00", end: "18:00" };
-  }
-  return draft;
-}
-
 function AvailabilityCard({ canWrite }: { canWrite: boolean }) {
   const availability = useAvailability();
   const saveSettings = useSaveAppointmentSettings();
@@ -215,18 +205,8 @@ function AvailabilityCard({ canWrite }: { canWrite: boolean }) {
 
 function MemberSchedule({ member }: { member: { id: string; name: string; role: string; rules: AvailabilityRule[] } }) {
   const save = useSaveAvailability();
-  const [draft, setDraft] = useState(() => toDraft(member.rules));
+  const hours = useWeekHours(member.rules);
   const [saved, setSaved] = useState(false);
-  useEffect(() => setDraft(toDraft(member.rules)), [member.rules]);
-  const set = (d: number, patch: Partial<DayDraft>) => {
-    setSaved(false);
-    setDraft((prev) => ({ ...prev, [d]: { ...prev[d]!, ...patch } }));
-  };
-  const invalid = WEEK_ORDER.some((d) => draft[d]!.on && timeToMinutes(draft[d]!.end) <= timeToMinutes(draft[d]!.start));
-  const submit = () => {
-    const rules = WEEK_ORDER.filter((d) => draft[d]!.on).map((d) => ({ weekday: d, startMinute: timeToMinutes(draft[d]!.start), endMinute: timeToMinutes(draft[d]!.end) }));
-    save.mutate({ userId: member.id, rules }, { onSuccess: () => setSaved(true) });
-  };
   return (
     <section className="note" aria-label={`Horario de ${member.name}`}>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
@@ -234,25 +214,17 @@ function MemberSchedule({ member }: { member: { id: string; name: string; role: 
           {member.name} <span className="muted" style={{ fontWeight: 400 }}>· {ROLE_LABEL[member.role] ?? member.role}</span>
         </strong>
         <span className="row" style={{ gap: 8 }}>
-          {saved && <span className="muted">Guardado</span>}
-          <button className="btn btn--sm btn--primary" disabled={save.isPending || invalid} onClick={submit}>
+          {saved && !hours.dirty && <span className="muted">Guardado</span>}
+          <button
+            className="btn btn--sm btn--primary"
+            disabled={save.isPending || hours.invalid}
+            onClick={() => save.mutate({ userId: member.id, rules: hours.value() }, { onSuccess: () => setSaved(true) })}
+          >
             Guardar horario
           </button>
         </span>
       </div>
-      <div className="availability-grid">
-        {WEEK_ORDER.map((d) => (
-          <div key={d} style={{ display: "contents" }}>
-            <label className="row" style={{ gap: 6 }}>
-              <input type="checkbox" checked={draft[d]!.on} onChange={(e) => set(d, { on: e.target.checked })} aria-label={`${member.name} atiende el ${WEEKDAY_LABEL[d]}`} />
-              {WEEKDAY_LABEL[d]}
-            </label>
-            <input className="input" type="time" step={900} value={draft[d]!.start} disabled={!draft[d]!.on} onChange={(e) => set(d, { start: e.target.value })} aria-label={`${WEEKDAY_LABEL[d]}, desde`} />
-            <input className="input" type="time" step={900} value={draft[d]!.end} disabled={!draft[d]!.on} onChange={(e) => set(d, { end: e.target.value })} aria-label={`${WEEKDAY_LABEL[d]}, hasta`} />
-          </div>
-        ))}
-      </div>
-      {invalid && <div className="alert alert--error" style={{ marginTop: 8 }}>La hora de fin debe ser mayor que la de inicio.</div>}
+      <WeekHoursGrid hours={hours} dayLabel={(day) => `${member.name} atiende el ${day}`} />
       <ErrorAlert error={save.error} />
     </section>
   );
@@ -314,6 +286,57 @@ function PrivacyCard({ disabled }: { disabled: boolean }) {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn--primary" type="submit" disabled={disabled || save.isPending}>
+            Guardar
+          </button>
+          {saved && <span className="muted">Guardado</span>}
+        </div>
+        <ErrorAlert error={save.error ?? settings.error} />
+      </form>
+    </div>
+  );
+}
+
+function AgentCard({ disabled }: { disabled: boolean }) {
+  const settings = useAgentSettings();
+  const save = useSaveAgentSettings();
+  const [name, setName] = useState("");
+  const hours = useWeekHours(settings.data?.businessHours);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (settings.data) setName(settings.data.assistantName);
+  }, [settings.data]);
+  if (settings.isPending) return <Spinner />;
+  const eta = settings.data?.advisorEtaNow ?? "en breve";
+  return (
+    <div className="card">
+      <div className="card__header">
+        <Bot size={16} /> Asistente y horario de atención
+      </div>
+      <form
+        className="card__body stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          save.mutate({ assistantName: name.trim(), businessHours: hours.value() }, { onSuccess: () => setSaved(true) });
+        }}
+      >
+        <div className="field" style={{ maxWidth: 320 }}>
+          <label htmlFor="assistant-name">Nombre del asistente</label>
+          <input id="assistant-name" className="input" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} disabled={disabled} />
+          <span className="field__hint">Así se presenta la IA por WhatsApp.</span>
+        </div>
+        <div>
+          <strong>Horario de atención de los asesores</strong>
+          <p className="muted" style={{ margin: "4px 0 10px" }}>
+            La IA contesta a cualquier hora. Fuera de este horario, cuando turna a un asesor, le dice al prospecto cuándo lo van a contactar en lugar de "en breve". Sin horario, siempre dice "en breve".
+          </p>
+          <WeekHoursGrid hours={hours} dayLabel={(day) => `Oficina abierta el ${day}`} disabled={disabled} />
+        </div>
+        <div className="note" aria-label="Qué promete la IA ahora">
+          Si alguien pide un asesor en este momento, la IA le dirá: <strong>"Un asesor te contactará {eta}."</strong>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn--primary" type="submit" disabled={disabled || save.isPending || hours.invalid || name.trim().length < 2}>
             Guardar
           </button>
           {saved && <span className="muted">Guardado</span>}

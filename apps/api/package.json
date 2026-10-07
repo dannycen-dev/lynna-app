@@ -31,7 +31,8 @@
     "user:create": "node scripts/create-user.mjs",
     "demo:users": "bash scripts/demo-users.sh",
     "eval:agent": "node scripts/eval-agent.mjs",
-    "demo:crm": "node scripts/demo-crm.mjs"
+    "demo:crm": "node scripts/demo-crm.mjs",
+    "release:dev": "bash scripts/release-dev.sh"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",

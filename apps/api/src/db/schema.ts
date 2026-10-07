@@ -24,6 +24,9 @@ const tenantId = () =>
     .notNull()
     .references(() => tenants.id);
 
+/** Horario de atención de los asesores: tramos por día (0 = domingo), en minutos desde la medianoche. */
+export type BusinessHours = { weekday: number; startMinute: number; endMinute: number }[];
+
 export const tenants = sqliteTable("tenants", {
   id: id(),
   name: text("name").notNull(),
@@ -35,6 +38,10 @@ export const tenants = sqliteTable("tenants", {
   // Agenda: zona horaria del negocio (horarios de los vendedores) y duración de cada cita.
   timezone: text("timezone").notNull().default("America/Mexico_City"),
   appointmentMinutes: integer("appointment_minutes").notNull().default(60),
+  // Cómo se presenta la IA y cuándo atienden los asesores. La IA contesta 24/7; fuera de este horario
+  // le dice al prospecto cuándo lo contactará un asesor ("mañana a partir de las 9:00") en lugar de "en breve".
+  assistantName: text("assistant_name").notNull().default("Lynna"),
+  businessHours: text("business_hours", { mode: "json" }).$type<BusinessHours>(),
   // Privacidad (LFPDPPP): enlace al aviso de privacidad y texto corto que se manda en el primer mensaje.
   privacyNoticeUrl: text("privacy_notice_url"),
   privacyNoticeText: text("privacy_notice_text"),

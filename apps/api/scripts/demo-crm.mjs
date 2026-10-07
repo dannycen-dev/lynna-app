@@ -244,6 +244,10 @@ for (const [n, email, day, hour, status, source] of APPOINTMENTS) {
     ${start}, ${start + H}, ${q(status)}, ${q(source)}, ${NOW - 2 * 24 * H}, ${NOW - 2 * 24 * H})`);
 }
 
+// ── Asistente y horario de atención de la oficina (lunes a viernes 9–18, sábado 9–14) ──────────
+const OFFICE_HOURS = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startMinute: 540, endMinute: 1080 })).concat([{ weekday: 6, startMinute: 540, endMinute: 840 }]);
+sql.push(`UPDATE tenants SET assistant_name = 'Lynna', business_hours = ${q(JSON.stringify(OFFICE_HOURS))} WHERE id = 'tnt-demo'`);
+
 // ── Base de conocimiento: textos de EJEMPLO (la desarrolladora debe reemplazarlos por los suyos) ──────
 // [categoría, título, texto, palabras clave, aprobado]
 const KB = [
@@ -300,4 +304,4 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
-console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial, avisos, horarios, citas y base de conocimiento.`);
+console.log(`✔ CRM de demo cargado en ${a.target}: ${P.length} prospectos (todas las etapas), conversaciones, notas, historial, avisos, horarios, citas, base de conocimiento y horario de oficina.`);

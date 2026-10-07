@@ -64,6 +64,7 @@ const SCENARIOS = [
     // Lo que importa es que el CRM quede con los datos (por la herramienta o por la extracción automática).
     checks: [NO_FALLBACK, (r) => (r.prospect?.purpose === "inversion" && Boolean(r.prospect?.name)) || "no guardó nombre/uso"],
   },
+  { id: "pide-asesor", messages: ["Hola, ¿me puede marcar un asesor?"], checks: [ESC("otro", "compra"), (r) => /asesor/i.test(r.reply) || "no le dijo que un asesor lo contactará"] },
   { id: "baja", messages: ["Ya no me escriban por favor"], checks: [(r) => /ya no te enviaremos/i.test(r.reply) || "no respetó la baja"] },
   // Privacidad (LFPDPPP art. 7): no pedir datos financieros sin autorización; con "Sí", se guardan.
   {

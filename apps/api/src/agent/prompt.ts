@@ -1,7 +1,7 @@
 // Prompt del sistema del agente. Cambiar el texto = subir PROMPT_VERSION (queda en ai_audit_log).
 // El prompt NO es la única defensa: lo prohibido no existe como herramienta y guard.ts valida cada respuesta.
 
-export const PROMPT_VERSION = "2026-10-07.4";
+export const PROMPT_VERSION = "2026-10-07.5";
 
 export type PromptContext = {
   assistantName: string;
@@ -16,6 +16,8 @@ export type PromptContext = {
   financialConsent: boolean;
   /** Lo que acaba de pasar con el consentimiento en este mensaje, si algo. */
   consentNote?: string | null;
+  /** Cuándo contactará un asesor: "en breve" o, fuera de horario, "mañana a partir de las 9:00". */
+  advisorEta?: string;
 };
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -40,7 +42,9 @@ REGLAS OBLIGATORIAS
 2. Solo menciona lotes que te haya devuelto buscar_lotes o detalle_lote. Si no aparece, no está disponible.
 3. Toda simulación es informativa: dilo ("cotización informativa, sujeta a confirmación por un asesor").
 4. NUNCA: negocies precios, ofrezcas o autorices descuentos fuera de los planes, modifiques contratos, confirmes apartados o pagos, prometas fechas de escrituración, confirmes temas legales, ni tomes decisiones legales o financieras por la empresa.
-5. Usa escalar_a_asesor y dile al prospecto que un asesor lo contactará en breve cuando:
+5. Usa escalar_a_asesor y dile al prospecto que un asesor lo contactará ${ctx.advisorEta ?? "en breve"}${
+    ctx.advisorEta && ctx.advisorEta !== "en breve" ? " (la oficina de ventas está cerrada en este momento; tú sigues atendiendo)" : ""
+  } cuando:
    - quiera comprar, apartar, pagar, ver el contrato o pregunte qué necesita para escriturar;
    - pida descuentos, precio especial o negociar;
    - pregunte temas legales, de escrituración o de pagos ya hechos;
@@ -63,11 +67,11 @@ ESTILO
 }
 
 /** Respuesta segura cuando el modelo falla o su respuesta no pasa el validador. */
-export const FALLBACK_REPLY =
-  "Gracias por tu mensaje. Para darte la información exacta, un asesor te va a contactar en breve por este medio. 🙌";
+export const fallbackReply = (eta = "en breve") => `Gracias por tu mensaje. Para darte la información exacta, un asesor te va a contactar ${eta} por este medio. 🙌`;
+export const FALLBACK_REPLY = fallbackReply();
 
-export const MEDIA_REPLY =
-  "Gracias, recibimos tu archivo. Por seguridad, un asesor lo revisará y te contactará en breve por este medio.";
+export const mediaReply = (eta = "en breve") => `Gracias, recibimos tu archivo. Por seguridad, un asesor lo revisará y te contactará ${eta} por este medio.`;
+export const MEDIA_REPLY = mediaReply();
 
 export const OPT_OUT_REPLY =
   "Entendido, ya no te enviaremos más mensajes. Si en el futuro quieres información, escríbenos y con gusto te atendemos.";

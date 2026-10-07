@@ -130,6 +130,9 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
 | `respond.ts` | Contexto, bitácora `ai_audit_log` y envío por WhatsApp (o "simulado" sin credenciales de Meta) |
 
 - **Simulador**: en el panel, *Agente de IA*. Mismo código que WhatsApp, sin Meta.
+- **Asistente y horario** (Configuración): nombre con el que se presenta la IA y horario de atención de los asesores
+  (`crm/business-hours.ts`). La IA contesta 24/7; fuera de horario promete el contacto "mañana a partir de las 9:00"
+  en lugar de "en breve" (escalamiento, red de seguridad y mensajes de respaldo).
 - **Privacidad** (`apps/api/src/privacy/consent.ts`, LFPDPPP): el sistema agrega el aviso de privacidad a la primera
   respuesta (enlace en Configuración). Presupuesto y enganche solo se guardan con consentimiento expreso: sin él, quedan
   en `pending_financial` y se pregunta "¿me autorizas?"; el "Sí"/"No" queda con fecha y texto. La IA no puede pedirlos sin
@@ -143,7 +146,7 @@ gratuito incluye 10,000 al día). Código en `apps/api/src/agent/`:
   simultáneas. El cron avisa al vendedor 2 h antes. Los recordatorios al prospecto por WhatsApp llegan con la Fase 2.
 - **Modelo**: `AI_MODEL` en `wrangler.jsonc` por entorno. Para elegirlo con datos:
   `pnpm --filter @lynna/api eval:agent --url https://devlynna.igniastudio.mx --token <ADMIN_API_TOKEN> --models m1,m2`.
-  18 escenarios (incluye privacidad, base de conocimiento, agendar y cancelar visitas; requieren los datos de `demo:crm`).
+  19 escenarios (incluye pedir asesor, privacidad, base de conocimiento, agendar y cancelar visitas; requieren los datos de `demo:crm`).
 - **Pruebas**: Vitest usa un LLM "de guion"; el E2E usa `AI_MODEL=fake` (determinista, solo `ENVIRONMENT=local`, sin red).
 - `pnpm dev` usa Workers AI real (gasta neuronas de la cuenta de Ignia). `wrangler dev` se cae a veces al recargar
   en caliente con la conexión remota de IA: si pasa, reinícialo.
@@ -219,6 +222,10 @@ pnpm --filter @lynna/api secrets:dev     # o secrets:stg / secrets:prod
 reales de Meta, `WHATSAPP_APP_SECRET` y `WHATSAPP_ACCESS_TOKEN` valen `PENDIENTE` (el webhook rechaza todo con 403).
 
 ### Comandos manuales (perfil `wrangler-ignia`)
+
+**Desplegar a dev a mano:** `pnpm --filter @lynna/api release:dev` — migra (con reintentos), se detiene si queda
+alguna migración pendiente, despliega y revisa `/health`. Nunca deja código nuevo sobre una base sin migrar.
+
 
 Los scripts remotos usan `XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia` (sesión de wrangler de Ignia).
 

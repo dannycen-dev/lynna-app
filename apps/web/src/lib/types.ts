@@ -344,3 +344,11 @@ export type KbArticle = {
 export type KbSearch = { query: string | null; hits: { id: string; title: string; body: string; category: KbCategory }[] };
 
 export type PrivacySettings = { privacyNoticeUrl: string | null; privacyNoticeText: string | null };
+
+export type AgentSettings = {
+  assistantName: string;
+  businessHours: { weekday: number; startMinute: number; endMinute: number }[];
+  timezone: string;
+  /** Lo que la IA le diría ahora a quien pide un asesor ("en breve", "mañana a partir de las 9:00"). */
+  advisorEtaNow: string;
+};

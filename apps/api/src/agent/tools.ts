@@ -67,6 +67,8 @@ export type ToolContext = {
   escalation: { reason: EscalationReason; detail: string } | null;
   /** El prospecto dio presupuesto/enganche sin haber autorizado datos financieros: quedaron pendientes. */
   financialPending?: boolean;
+  /** Cuándo contactará un asesor según el horario de atención ("en breve", "mañana a partir de las 9:00"). */
+  advisorEta?: string;
 };
 
 const pesos = (cents: number) => Math.round(cents / 100);
@@ -541,7 +543,7 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
       const reason = (ESCALATION_REASONS as readonly string[]).includes(String(args.motivo)) ? (args.motivo as EscalationReason) : "otro";
       const detail = (str(args.detalle) ?? "").slice(0, 500);
       await escalate(ctx, reason, detail);
-      return { ok: true, mensaje: "Un asesor fue notificado. Dile al prospecto que lo contactarán en breve; no prometas nada más." };
+      return { ok: true, mensaje: `Un asesor fue notificado. Dile al prospecto que lo contactarán ${ctx.advisorEta ?? "en breve"}; no prometas nada más.` };
     }
 
     default:

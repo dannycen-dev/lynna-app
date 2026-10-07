@@ -1,7 +1,7 @@
 import { AlertTriangle, Bot, ChevronDown, ChevronRight, Paperclip, RotateCcw, Send, ShieldCheck, UserCheck, Wrench } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
-import { useSimulatorHistory, useSimulatorReset, useSimulatorSend } from "../lib/api";
+import { useAgentSettings, useSimulatorHistory, useSimulatorReset, useSimulatorSend } from "../lib/api";
 import { dateTime, HANDOFF_LABEL, money, PURPOSE_LABEL, STAGE_LABEL, temperature, TIMEFRAME_LABEL, TOOL_LABEL } from "../lib/format";
 import type { AiAudit, ToolTrace } from "../lib/types";
 
@@ -17,6 +17,7 @@ const SUGGESTIONS = [
 ];
 
 export function Simulador() {
+  const agentSettings = useAgentSettings();
   const history = useSimulatorHistory();
   const send = useSimulatorSend();
   const reset = useSimulatorReset();
@@ -64,7 +65,7 @@ export function Simulador() {
               <Bot size={18} />
             </span>
             <div>
-              <strong>Lynna</strong>
+              <strong>{agentSettings.data?.assistantName ?? "Lynna"}</strong>
               <div className="sim__status">{send.isPending ? "escribiendo…" : "asistente virtual"}</div>
             </div>
           </header>

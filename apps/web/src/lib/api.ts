@@ -4,6 +4,7 @@ import { useSession } from "./session";
 
 export { ApiError } from "./api-client";
 import type {
+  AgentSettings,
   PrivacySettings,
   KbArticle,
   KbSearch,
@@ -418,5 +419,19 @@ export function useDeleteProspect() {
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       call<void>(`/prospects/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ reason }) }),
     onSuccess: () => invalidate("prospects", "summary", "agenda", "notifications"),
+  });
+}
+
+// ── Asistente y horario de atención ────────────────────────────────────────────
+
+export const useAgentSettings = () => useApiQuery<AgentSettings>(["agent-settings"], "/settings/agent");
+
+export function useSaveAgentSettings() {
+  const { call, tenant } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Pick<AgentSettings, "assistantName" | "businessHours">>) =>
+      call<AgentSettings>("/settings/agent", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (saved) => qc.setQueryData([tenant, "agent-settings"], saved),
   });
 }

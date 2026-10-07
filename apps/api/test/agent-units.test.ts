@@ -82,6 +82,14 @@ describe("red de seguridad de intención (frases del cliente)", () => {
     expect(detectEscalation("¿qué lotes tienen?")).toBeNull();
     expect(detectEscalation("lo quiero pensar")).toBeNull();
   });
+  it.each(["Hola, ¿me puede marcar un asesor?", "quiero hablar con una persona", "pásame con un vendedor", "¿me pueden llamar?", "prefiero que me atienda un asesor"])(
+    "'%s' → pide un asesor",
+    (text) => expect(detectEscalation(text)).toBe("otro"),
+  );
+  it.each(["¿cuánto tarda en llegar el asesor a la visita?", "mi asesor me dijo que hay lotes en esquina", "¿a qué hora me puede recibir el asesor en la visita?"])(
+    "'%s' → no es pedir un asesor",
+    (text) => expect(detectEscalation(text)).toBeNull(),
+  );
   it("baja", () => {
     expect(isOptOut("BAJA")).toBe(true);
     expect(isOptOut("ya no me escriban por favor")).toBe(true);

@@ -8,7 +8,8 @@ import { log } from "../lib/log";
 import { extractAmounts, validateReply } from "./guard";
 import { detectEscalation, isOptOut } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
-import { buildSystemPrompt, FALLBACK_REPLY, MEDIA_REPLY, OPT_OUT_REPLY } from "./prompt";
+import { buildSystemPrompt, fallbackReply, mediaReply, OPT_OUT_REPLY } from "./prompt";
+import { advisorEta } from "../crm/business-hours";
 import { CONSENT_QUESTION, isAffirmative, isNegative, mentionsFinancialData, privacyNotice, recordConsent } from "../privacy/consent";
 import { escalate, newFacts, rememberSlot, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
 
@@ -66,10 +67,23 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   const base = { draft: null, toolTrace: [], blocked: [], neurons: 0, modelsUsed: [] };
   let prospect = input.prospect;
   const tenantRow = await input.db
-    .select({ timezone: tenants.timezone, name: tenants.name, privacyNoticeUrl: tenants.privacyNoticeUrl, privacyNoticeText: tenants.privacyNoticeText })
+    .select({
+      timezone: tenants.timezone,
+      name: tenants.name,
+      privacyNoticeUrl: tenants.privacyNoticeUrl,
+      privacyNoticeText: tenants.privacyNoticeText,
+      assistantName: tenants.assistantName,
+      businessHours: tenants.businessHours,
+    })
     .from(tenants)
     .where(eq(tenants.id, input.tenant.id))
     .get();
+
+  // Horario de atención: qué se le promete al prospecto cuando se turna a un asesor. Esa hora y fecha
+  // salen del sistema, así que cuentan como datos verificados para el validador.
+  const eta = advisorEta(tenantRow?.businessHours, tenantRow?.timezone ?? "America/Mexico_City");
+  ctx.advisorEta = eta;
+  rememberSlot(ctx.facts, eta.replace(/(\d{1,2}):(\d{2})$/, (_, h: string, m: string) => `${h.padStart(2, "0")}:${m}`));
 
   /**
    * Privacidad, agregada por el sistema (no por el modelo) al final de la respuesta:
@@ -103,7 +117,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   // 1. Archivos (INE, comprobantes, fotos): nunca pasan por el modelo.
   if (input.incoming.some((m) => MEDIA_TYPES.has(m.type))) {
     await escalate(ctx, "documentos", `El prospecto envió ${input.incoming.filter((m) => MEDIA_TYPES.has(m.type)).length} archivo(s).`);
-    return done({ ...base, reply: MEDIA_REPLY, fallback: false, deterministic: true });
+    return done({ ...base, reply: mediaReply(eta), fallback: false, deterministic: true });
   }
 
   // 2. Baja: se respeta sin pasar por el modelo.
@@ -146,7 +160,8 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     {
       role: "system",
       content: buildSystemPrompt({
-        assistantName: "Lynna",
+        assistantName: tenantRow?.assistantName || "Lynna",
+        advisorEta: eta,
         companyName: input.tenant.name,
         today: todayIn(),
         prospectName: prospect.name ?? prospect.profileName,
@@ -241,7 +256,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
 
   if (!reply) {
     fallback = true;
-    reply = FALLBACK_REPLY;
+    reply = fallbackReply(eta);
     await escalate(ctx, "otro", `Respuesta de la IA no disponible o bloqueada: ${blocked.join("; ") || "sin texto"}.`);
   }
 
@@ -249,7 +264,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   const detected = detectEscalation(incomingText);
   if (detected && !ctx.escalation) {
     await escalate(ctx, detected, `Detectado por reglas en: "${incomingText.slice(0, 200)}"`);
-    if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará en breve para ayudarte con eso.`;
+    if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará ${eta} para ayudarte con eso.`;
   }
 
   return done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { canSendWhatsApp } from "../agent/respond";
 import { actorOf, type AuthVariables, type Principal } from "../auth/middleware";
 import { slotLabel } from "../crm/agenda";
+import { advisorEta } from "../crm/business-hours";
 import { assignProspect, isSeller, prospectScope, tenantUsers } from "../crm/assignment";
 import { getDb, type Db } from "../db/client";
 import {
@@ -497,4 +498,34 @@ crm.patch("/settings/privacy", async (c) => {
     auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "tenant", entityId: c.var.tenant.id, action: "privacy_settings", data }),
   ]);
   return c.json(updated[0]);
+});
+
+// ── Asistente y horario de atención ───────────────────────────────────────────
+
+crm.get("/settings/agent", (c) => {
+  const t = c.var.tenant;
+  return c.json({
+    assistantName: t.assistantName,
+    businessHours: t.businessHours ?? [],
+    timezone: t.timezone,
+    // Lo que la IA le diría ahora mismo a alguien que pide un asesor.
+    advisorEtaNow: advisorEta(t.businessHours, t.timezone),
+  });
+});
+
+const hoursRule = z
+  .object({ weekday: z.int().min(0).max(6), startMinute: z.int().min(0).max(24 * 60), endMinute: z.int().min(0).max(24 * 60) })
+  .refine((r) => r.endMinute > r.startMinute, { message: "La hora de cierre debe ser mayor que la de apertura." });
+
+crm.patch("/settings/agent", async (c) => {
+  if (isSeller(c.var.principal)) return c.json({ error: "forbidden", message: "Solo un gerente o dueño puede cambiar esto." }, 403);
+  const parsed = await readBody(c, z.object({ assistantName: z.string().trim().min(2).max(40).optional(), businessHours: z.array(hoursRule).max(21).optional() }));
+  if (!parsed.success) return c.json({ error: "validation", issues: z.flattenError(parsed.error).fieldErrors }, 400);
+  const db = getDb(c.env.DB);
+  const [updated] = await db.batch([
+    db.update(tenants).set(parsed.data).where(eq(tenants.id, c.var.tenant.id)).returning(),
+    auditInsert(db, { tenantId: c.var.tenant.id, actor: actorOf(c.var.principal), entity: "tenant", entityId: c.var.tenant.id, action: "agent_settings", data: parsed.data }),
+  ]);
+  const t = updated[0]!;
+  return c.json({ assistantName: t.assistantName, businessHours: t.businessHours ?? [], timezone: t.timezone, advisorEtaNow: advisorEta(t.businessHours, t.timezone) });
 });

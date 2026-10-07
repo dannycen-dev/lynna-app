@@ -290,7 +290,8 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] **Base de conocimiento** (§2.2): FAQ, requisitos, formas de pago — solo textos aprobados. — _2026-10-07, dev; eval 16/16. Faltan los textos REALES del cliente (hoy son de ejemplo)_
 - [x] **Privacidad (LFPDPPP)**: aviso en el primer mensaje, consentimiento para datos financieros, ARCO desde la ficha. — _2026-10-07, dev; validador además bloquea respuestas con JSON/jerga interna y "déjame consultar" (casos reales vistos con Gemma)_
 - [ ] Ajuste menor: cuando la red de seguridad ya turnó (p. ej. escrituras), la IA a veces pregunta "¿quieres que un asesor te contacte?" en lugar de afirmar que lo hará.
-- [ ] **Configuración por desarrolladora**: nombre del asistente, horario de atención, texto del aviso de privacidad, formas de pago.
+- [x] **Configuración por desarrolladora**: nombre del asistente y horario de atención de la oficina (fuera de horario la IA promete el contacto para cuando abre: "mañana a partir de las 9:00", en vez de "en breve"); aviso de privacidad (ya hecho); formas de pago → base de conocimiento. — _2026-10-07, dev; eval 19/19 con la oficina cerrada_
+- [x] Red de seguridad: si el prospecto pide hablar con una persona ("¿me puede marcar un asesor?"), se turna. — _caso real visto en dev_
 - [ ] **CRM**: filtros por desarrollo y calificación, exportar CSV, métricas (conversión por etapa, tiempo de primera respuesta).
 - [ ] **Usuarios desde el panel**: alta, roles, desactivar, cambiar contraseña (hoy por script `pnpm user:create`).
 - [ ] **Apartado vencido**: avisar al vendedor cuando el cron libera un lote (§2.11).
