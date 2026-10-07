@@ -283,6 +283,8 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [x] Agente con Workers AI: Gemma 4 sin razonamiento + respaldo Mistral; eval 10/10 en 2.8 s (`pnpm eval:agent`).
 - [x] Datos de demo: `pnpm demo:users` (un usuario por rol) y `pnpm demo:crm` (12 prospectos) en dev y stg.
 
+> **Decisión (2026-10-07):** por ahora todo se trabaja y despliega solo en **dev**; stg y prod se quedan como están.
+
 ### Pendientes sin WhatsApp (orden propuesto)
 - [x] **Agenda de citas** (§2.8): horarios por vendedor, la IA agenda sin empalmes, calendario en el panel. — _2026-10-07, dev; eval del agente 13/13 (incluye agendar y cancelar)_
 - [ ] **Base de conocimiento** (§2.2): FAQ, requisitos para escriturar, formas de pago — textos aprobados por el cliente (Vectorize).
