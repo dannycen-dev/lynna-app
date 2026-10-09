@@ -35,14 +35,14 @@ test("agenda: horario del vendedor → la IA agenda → Citas → ficha → reag
   await login(admin, "admin");
   await sidebar(admin).getByRole("link", { name: "Agente de IA" }).click();
   await admin.getByLabel("Mensaje").fill("Quiero agendar una visita");
-  await admin.getByRole("button", { name: "Enviar" }).click();
+  await admin.getByRole("button", { name: "Enviar", exact: true }).click();
   const offer = admin.getByText(/Tengo estos horarios para visitar el desarrollo/).last();
   await expect(offer).toBeVisible({ timeout: 15_000 });
   const [, date, time] = /\((\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})\)/.exec((await offer.textContent()) ?? "") ?? [];
   expect(date && time).toBeTruthy();
 
   await admin.getByLabel("Mensaje").fill(`Agenda la visita el ${date} a las ${time}`);
-  await admin.getByRole("button", { name: "Enviar" }).click();
+  await admin.getByRole("button", { name: "Enviar", exact: true }).click();
   await expect(admin.getByText(/Tu visita quedó agendada/).last()).toBeVisible({ timeout: 15_000 });
   await expect(admin.getByText("Validada").last()).toBeVisible();
 

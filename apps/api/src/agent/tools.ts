@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { CatalogError, getLot, plansForDevelopment, searchAvailableLots, simulateForLot } from "../catalog/service";
 import type { Db } from "../db/client";
@@ -621,7 +621,15 @@ async function sendMaterial(
       .where(and(eq(lots.tenantId, tenantId), eq(lots.block, target.manzana.toUpperCase()), eq(lots.number, target.lote)))
       .get();
   }
-  const { match, all } = lot ? { match: await db.select().from(developments).where(eq(developments.id, lot.developmentId)).get(), all: [] } : await findDevelopment(db, tenantId, target.desarrollo);
+  let { match, all } = lot ? { match: await db.select().from(developments).where(eq(developments.id, lot.developmentId)).get(), all: [] as (typeof developments.$inferSelect)[] } : await findDevelopment(db, tenantId, target.desarrollo);
+  if (!match && !target.desarrollo) {
+    // Sin nombre: el desarrollo de los lotes que acaba de ver o el que le interesa.
+    const devId =
+      ctx.foundLots?.[0]?.developmentId ??
+      (await db.select({ id: prospects.interestDevelopmentId }).from(prospects).where(eq(prospects.id, ctx.prospectId)).get())?.id ??
+      (await lastShownDevelopment(db, ctx.conversationId));
+    if (devId) match = all.find((d) => d.id === devId) ?? (await db.select().from(developments).where(eq(developments.id, devId)).get());
+  }
   if (!match) return { error: "¿De qué desarrollo?", desarrollos: all.map((d) => d.name) };
 
   if (tipo === "ubicacion") {
@@ -706,6 +714,19 @@ export async function lotCarousel(db: Db, tenantId: string, found: (typeof lots.
     };
   });
   return { kind: "carousel", body: "Desliza para ver los lotes 👉", cards };
+}
+
+/** Desarrollo del último material o lote que se le mostró en la conversación (por lot_media). */
+async function lastShownDevelopment(db: Db, conversationId: string): Promise<string | null> {
+  const row = await db
+    .select({ developmentId: lotMedia.developmentId })
+    .from(messages)
+    .innerJoin(lotMedia, eq(lotMedia.id, messages.mediaId))
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.direction, "out")))
+    .orderBy(desc(messages.createdAt))
+    .limit(1)
+    .get();
+  return row?.developmentId ?? null;
 }
 
 /** Cómo se muestran los lotes encontrados: lista (se ve en todos los clientes) o carrusel (solo celular). */

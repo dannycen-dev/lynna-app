@@ -171,7 +171,7 @@ test("agente de IA: conversar en el simulador, ver herramientas y escalamiento",
   await expect(page.getByRole("heading", { name: "Agente de IA" })).toBeVisible();
 
   await page.getByLabel("Mensaje").fill("¿Qué lotes tienen?");
-  await page.getByRole("button", { name: "Enviar" }).click();
+  await page.getByRole("button", { name: "Enviar", exact: true }).click();
   await expect(page.getByText("Tengo disponible Manzana C, lote 2 por $560,000 MXN.", { exact: false })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Buscó lotes disponibles")).toBeVisible();
   await expect(page.getByText("Validada")).toBeVisible();
@@ -191,7 +191,7 @@ test("CRM: aviso de compra → ficha → tomar la conversación → nota → eta
   await test.step("el prospecto dice que quiere comprar (simulador)", async () => {
     await sidebar(page).getByRole("link", { name: "Agente de IA" }).click();
     await page.getByLabel("Mensaje").fill("Quiero comprar, ¿cómo lo aparto?");
-    await page.getByRole("button", { name: "Enviar" }).click();
+    await page.getByRole("button", { name: "Enviar", exact: true }).click();
     await expect(page.getByText("Quiere comprar → asesor")).toBeVisible({ timeout: 15_000 });
   });
 

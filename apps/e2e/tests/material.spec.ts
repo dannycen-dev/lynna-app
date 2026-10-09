@@ -11,8 +11,9 @@ const PHOTO = readFileSync(path.join(import.meta.dirname, "..", "fixtures", "fot
 
 async function login(page: Page) {
   await page.goto("/");
-  await page.getByLabel("Correo").fill(USERS.manager.email);
-  await page.getByLabel("Contraseña", { exact: true }).fill(USERS.manager.password);
+  // Con el vendedor: el simulador guarda una conversación por usuario y otras pruebas usan la del gerente.
+  await page.getByLabel("Correo").fill(USERS.seller.email);
+  await page.getByLabel("Contraseña", { exact: true }).fill(USERS.seller.password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { name: "Bienvenido a Lynna" })).toBeVisible();
 }
@@ -30,7 +31,7 @@ test("simulador: lista de lotes con foto del desarrollo y envío de fotos a pedi
     await page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Agente de IA" }).click();
 
     await page.getByLabel("Mensaje").fill("¿Qué lotes tienen disponibles?");
-    await page.getByRole("button", { name: "Enviar" }).click();
+    await page.getByRole("button", { name: "Enviar", exact: true }).click();
     const carousel = page.locator(".bubble__carousel");
     await expect(carousel).toBeVisible({ timeout: 15_000 });
     await expect(carousel).toContainText("lotes disponibles");
@@ -38,7 +39,7 @@ test("simulador: lista de lotes con foto del desarrollo y envío de fotos a pedi
     await expect(carousel.locator("img")).toHaveAttribute("src", `/media/${media.id}`);
 
     await page.getByLabel("Mensaje").fill("Mándame fotos del desarrollo");
-    await page.getByRole("button", { name: "Enviar" }).click();
+    await page.getByRole("button", { name: "Enviar", exact: true }).click();
     const photo = page.getByRole("img", { name: "Casa club con alberca" });
     await expect(photo).toBeVisible({ timeout: 15_000 });
     expect(await photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
