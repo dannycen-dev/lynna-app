@@ -64,6 +64,12 @@ export const fakeLlm: LlmClient = {
       if (articulos.length === 0) return say("No tengo esa información confirmada; un asesor te la puede confirmar.");
       return say(`Según la información de la desarrolladora: ${articulos[0]!.contenido}`);
     }
+    if (/\b(foto|fotos|imagenes|plano|ubicacion)\b/.test(text)) {
+      const tipo = /plano/.test(text) ? "plano" : /ubicacion/.test(text) ? "ubicacion" : "fotos";
+      const sent = result("enviar_material");
+      if (!sent) return call("enviar_material", { tipo });
+      return say(JSON.parse(sent).ok ? "Listo, te envío el material." : "Por ahora no tengo ese material; un asesor te lo comparte.");
+    }
     if (/\b(lote|lotes|terreno|terrenos|disponible)\b/.test(text)) {
       const found = result("buscar_lotes");
       if (!found) return call("buscar_lotes", {});

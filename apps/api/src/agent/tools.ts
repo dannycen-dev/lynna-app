@@ -632,7 +632,8 @@ async function sendMaterial(
       await db
         .select({ mediaId: messages.mediaId })
         .from(messages)
-        .where(and(eq(messages.conversationId, ctx.conversationId), eq(messages.direction, "out"), isNotNull(messages.mediaId)))
+        // Solo fotos y PDF enviados como tales: la miniatura de un carrusel no cuenta como "ya le mandé esa foto".
+        .where(and(eq(messages.conversationId, ctx.conversationId), eq(messages.direction, "out"), isNotNull(messages.mediaId), inArray(messages.type, ["image", "document"])))
     ).map((m) => m.mediaId),
   );
   const queued = new Set((ctx.attachments ?? []).flatMap((a) => (a.kind === "image" || a.kind === "document" ? [a.mediaId] : [])));
