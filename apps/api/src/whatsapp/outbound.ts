@@ -81,6 +81,8 @@ export async function makeQuote(t: Pick<Target, "db" | "env" | "tenantId" | "pro
   };
 }
 
+const MEDIA_SETTLE_MS = 2500;
+
 export const mediaUrl = (env: Env, mediaId: string) => `${env.PUBLIC_URL.replace(/\/$/, "")}/media/${mediaId}`;
 
 /** Texto con que se guarda una lista o carrusel de lotes (también sirve para no repetirlos). */
@@ -161,6 +163,8 @@ export async function deliverAttachments(t: Target, attachments: Attachment[]): 
         continue; // sin PDF el prospecto igual tiene el resumen en el texto
       }
     } else a = original;
+    // WhatsApp entrega las imágenes después de descargarlas; una pausa evita que los botones lleguen antes.
+    if (t.real && (a.kind === "buttons" || a.kind === "lot_list") && sent > 0) await new Promise((r) => setTimeout(r, MEDIA_SETTLE_MS));
     const row = describe(a);
     let wamid = `sim.${crypto.randomUUID()}`;
     let status: "accepted" | "simulated" | "failed" = "simulated";
