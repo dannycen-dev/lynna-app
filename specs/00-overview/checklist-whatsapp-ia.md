@@ -66,9 +66,9 @@
 
 ### 2.3 Envío de precios, medidas, ubicación, fotos, planos y características
 - [ ] Fotos y planos en **R2** asociados a desarrollo/lote; carga desde el panel. — _subida/servido listos y probados en local; falta activar R2 en la cuenta de Ignia_
-- [ ] Envío por Cloud API: `image`, `document` (PDF del plano), `location` (lat/lng del desarrollo).
+- [x] Envío por Cloud API: `image`, `document` (PDF del plano), `location` (lat/lng del desarrollo). — _2026-10-08: herramienta `enviar_material` + carrusel interactivo de lotes (foto, medidas, precio, botones "Ver detalle"/"Agendar visita"); falta activar R2 en la cuenta de Ignia para que dev sirva los archivos_
 - [x] Ficha de lote generada desde datos reales (precio y medidas salen de la BD, no del modelo). — _`detalle_lote`_
-- [ ] Opcional fase 2: PDF de cotización con Browser Rendering.
+- [x] PDF de cotización con la tabla de pagos completa y la marca de la desarrolladora — _2026-10-08: pdf-lib dentro del Worker (sin Browser Rendering); se manda al simular un plan. Requiere R2_
 - **Acepta:** al pedir "mándame el plano" llega el PDF correcto del desarrollo consultado.
 
 ### 2.4 Enganche, mensualidades y formas de pago
@@ -304,14 +304,14 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 ### Al final: WhatsApp real (Fase 2)
 - [ ] Credenciales de Meta (app secret, access token, phone_number_id) en dev/stg/prod. — _2026-10-08: dev listo (token permanente del usuario del sistema "Lynna ERP API", app secret, verify token; webhook `https://devlynna.igniastudio.mx/whatsapp/webhook`). stg/prod pendientes_
 - [ ] Envío de fotos, planos (PDF) y ubicación; plantillas aprobadas; aviso de privacidad al primer contacto.
-- [ ] Envío real de seguimientos y recordatorios de cita; aviso al vendedor por WhatsApp.
+- [ ] Envío real de seguimientos y recordatorios de cita; aviso al vendedor por WhatsApp. — _2026-10-08: seguimientos reales listos según políticas de Meta (texto con botones dentro de 24 h; plantillas de marketing `lynna_seguimiento_1/2` con botón de baja fuera; no se manda si no leyó el anterior; 131049 espera 24 h; 131050 = baja). Plantillas en revisión de Meta. Faltan recordatorios de cita y aviso al vendedor_
 
 ### Pendientes del cliente / de Ignia (no son código)
 - [ ] `CLOUDFLARE_API_TOKEN` en GitHub (deploy automático; hoy se despliega a mano).
 - [ ] Activar **R2** en la cuenta de Ignia (fotos y planos en dev/stg/prod).
 - [ ] **Workers Paid** (USD 5/mes) antes de producción: más neuronas y modelos.
 - [ ] Primer release **v0.1.0** a producción (con aprobación).
-- [ ] Del cliente: inventario real (CSV), planes de pago, FAQ y textos legales, número de WhatsApp.
+- [ ] Del cliente: inventario real (CSV), planes de pago, FAQ y textos legales, número de WhatsApp. — _2026-10-08: dev usa el proyecto "Sendero 321 Residencial" de Inmobiliaria Lote 321 (`seed/sendero-321.sql`, 60 lotes, 4 planes, 11 textos; imágenes ilustrativas generadas). Reemplazar con datos reales cuando los entregue el cliente_
 - [ ] Propuesta comercial (§10) para el cliente. Hecho: análisis interno de costos, competencia (Adara, Manivela MV-Gaia, Leadsales, Kosmo, Aurora) y precios sugeridos en `propuestas/Lynna-costos-y-precios-2026-10.docx` (6-oct-2026). Falta: versión para el cliente.
 - [ ] **Privacidad (LFPDPPP, DOF 20-03-2025)** — detalle en `propuestas/Lynna-costos-y-precios-2026-10.docx`:
   - [x] Aviso de privacidad enlazado desde el primer mensaje (lo agrega el sistema, no el modelo; enlace y texto en Configuración). — _2026-10-07, dev_
