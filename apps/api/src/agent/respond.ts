@@ -3,6 +3,7 @@ import { getDb } from "../db/client";
 import { aiAuditLog, conversations, MESSAGE_STATUS_RANK, messages, prospects, tenants, waAccounts } from "../db/schema";
 import { log } from "../lib/log";
 import { isWithinServiceWindow, markReadWithTyping, sendText } from "../whatsapp/client";
+import { deliverAttachments } from "../whatsapp/outbound";
 import { fakeLlm } from "./fake-llm";
 import { withFallback, workersAiClient, type LlmClient } from "./llm";
 import { extractProspectData, looksLikeProspectData } from "./extract";
@@ -155,6 +156,23 @@ export async function respondToConversation(
       createdAt: now,
     }),
   ]);
+
+  // Material (fotos, plano, ubicación, carrusel) después del texto, en el mismo orden en que lo verá el prospecto.
+  if (result.attachments.length > 0 && sent !== "skipped") {
+    await deliverAttachments(
+      {
+        db,
+        env,
+        tenantId: tenant.id,
+        conversationId,
+        phoneNumberId: account.phoneNumberId,
+        to: prospect.phone,
+        real: sent === "whatsapp",
+        prospectName: prospect.name ?? prospect.profileName,
+      },
+      result.attachments,
+    );
+  }
 
   // Extracción de datos separada de la conversación: si el modelo no guardó datos que el
   // prospecto sí dio, una llamada corta y dedicada los extrae y actualiza la calificación.

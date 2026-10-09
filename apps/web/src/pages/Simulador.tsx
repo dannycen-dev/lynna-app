@@ -1,4 +1,5 @@
 import { AlertTriangle, Bot, ChevronDown, ChevronRight, Paperclip, RotateCcw, Send, ShieldCheck, UserCheck, Wrench } from "lucide-react";
+import { MessageContent } from "../components/MessageContent";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ErrorAlert, PageHeader, Spinner } from "../components/ui";
 import { useAgentSettings, useSimulatorHistory, useSimulatorReset, useSimulatorSend } from "../lib/api";
@@ -86,8 +87,7 @@ export function Simulador() {
             )}
             {messages.map((m) => (
               <div key={m.id} className={`bubble bubble--${m.direction === "in" ? "out" : "in"}`}>
-                {m.type !== "text" && <em className="muted">[{m.type === "image" ? "imagen" : "archivo"}] </em>}
-                {m.body}
+                <MessageContent m={m} />
                 <span className="bubble__meta">{dateTime(m.createdAt)}</span>
               </div>
             ))}

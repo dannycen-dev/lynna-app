@@ -1,3 +1,4 @@
+import { MessageContent } from "../components/MessageContent";
 import { ArrowLeft, Bot, CalendarCheck, Download, History, MessageCircle, Send, ShieldCheck, StickyNote, Trash2, UserCheck, UserRoundCheck } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -252,9 +253,7 @@ function Conversation(props: { conversationId: string; aiPaused: boolean; takenB
       <div className="sim__messages chat">
         {props.messages.map((m) => (
           <div key={m.id} className={`bubble bubble--${m.direction === "in" ? "in" : "out"}${m.author === "user" ? " bubble--human" : ""}`}>
-            {m.type === "template" && <em className="muted">Seguimiento automático · </em>}
-            {m.type !== "text" && m.type !== "template" && <em className="muted">[{m.type === "image" ? "imagen" : "archivo"}] </em>}
-            {m.body}
+            <MessageContent m={m} />
             <span className="bubble__meta">
               {m.direction === "out" && `${AUTHOR_LABEL[m.author]} · `}
               {dateTime(m.waTimestamp ?? m.createdAt)}

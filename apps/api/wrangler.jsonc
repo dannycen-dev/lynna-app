@@ -28,6 +28,8 @@
 
   "vars": {
     "ENVIRONMENT": "local",
+    // URL pública del entorno: Meta descarga de aquí las fotos y planos (/media/:id) que manda Lynna.
+    "PUBLIC_URL": "http://localhost:8787",
     "WHATSAPP_GRAPH_VERSION": "v23.0",
     // Ventana para agrupar ráfagas de mensajes del mismo prospecto antes de responder.
     "DEBOUNCE_MS": "3000",
@@ -91,6 +93,7 @@
       "routes": [{ "pattern": "devlynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "dev",
+        "PUBLIC_URL": "https://devlynna.igniastudio.mx",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "ai",
@@ -136,6 +139,7 @@
       "routes": [{ "pattern": "stglynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "stg",
+        "PUBLIC_URL": "https://stglynna.igniastudio.mx",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "ai",
@@ -180,6 +184,7 @@
       "routes": [{ "pattern": "lynna.igniastudio.mx", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "prod",
+        "PUBLIC_URL": "https://lynna.igniastudio.mx",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "off",

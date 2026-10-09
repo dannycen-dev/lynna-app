@@ -277,6 +277,8 @@ export type Message = {
   author: "prospect" | "ai" | "user" | "system";
   type: string;
   body: string | null;
+  /** En lo que manda Lynna: id de /media/:id (foto, PDF, primera foto del carrusel). */
+  mediaId?: string | null;
   status: string;
   error?: string | null;
   createdAt: number;

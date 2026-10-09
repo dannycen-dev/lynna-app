@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REPLY_ID_PREFIX } from "./client";
 
 // Esquema tolerante del webhook de la Cloud API: validamos lo que usamos y dejamos pasar el resto,
 // porque Meta añade campos sin avisar.
@@ -18,7 +19,7 @@ const inboundMessage = z.looseObject({
   location: z
     .looseObject({ latitude: z.number(), longitude: z.number(), name: z.string().optional() })
     .optional(),
-  button: z.looseObject({ text: z.string() }).optional(),
+  button: z.looseObject({ text: z.string(), payload: z.string().optional() }).optional(),
   interactive: z
     .looseObject({
       button_reply: z.looseObject({ id: z.string(), title: z.string() }).optional(),
@@ -92,7 +93,11 @@ export function extractEvents(payload: z.infer<typeof webhookPayload>): InboundE
       for (const m of value.messages ?? []) {
         const profileName = value.contacts?.find((c) => c.wa_id === m.from)?.profile?.name;
         const mediaPart = m.image ?? m.document ?? m.audio ?? m.video;
+        // Botones de Lynna: el id trae la frase completa ("lynna:Quiero agendar una visita al lote C-2"),
+        // así la IA recibe el contexto que no cabe en los 20 caracteres del título.
+        const fromButton = [m.interactive?.button_reply?.id, m.button?.payload].find((id) => id?.startsWith(REPLY_ID_PREFIX));
         const text =
+          (fromButton ? fromButton.slice(REPLY_ID_PREFIX.length) : undefined) ??
           m.text?.body ??
           m.button?.text ??
           m.interactive?.button_reply?.title ??

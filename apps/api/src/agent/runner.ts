@@ -12,7 +12,7 @@ import { buildSystemPrompt, fallbackReply, mediaReply, OPT_OUT_REPLY } from "./p
 import { advisorEta } from "../crm/business-hours";
 import { officeClosedDates } from "../crm/time-off";
 import { CONSENT_QUESTION, isAffirmative, isNegative, mentionsFinancialData, privacyNotice, recordConsent } from "../privacy/consent";
-import { escalate, newFacts, rememberSlot, runTool, TOOL_SPECS, type EscalationReason, type ToolContext } from "./tools";
+import { escalate, lotCarousel, newFacts, rememberSlot, runTool, TOOL_SPECS, type Attachment, type EscalationReason, type ToolContext } from "./tools";
 
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 16;
@@ -47,6 +47,8 @@ export type AgentResult = {
   modelsUsed: string[];
   neurons: number;
   latencyMs: number;
+  /** Material para mandar después del texto (fotos, plano, ubicación, carrusel de lotes). */
+  attachments: Attachment[];
 };
 
 export async function runAgent(input: AgentInput): Promise<AgentResult> {
@@ -110,8 +112,9 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     return parts.join("\n\n");
   }
 
-  const done = async (r: Omit<AgentResult, "latencyMs" | "escalation">, privacy = true): Promise<AgentResult> => ({
+  const done = async (r: Omit<AgentResult, "latencyMs" | "escalation" | "attachments">, privacy = true): Promise<AgentResult> => ({
     ...r,
+    attachments: [],
     reply: privacy ? await withPrivacy(r.reply) : r.reply,
     escalation: ctx.escalation?.reason ?? null,
     latencyMs: Date.now() - started,
@@ -275,7 +278,15 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará ${eta} para ayudarte con eso.`.trim();
   }
 
-  return done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });
+  const result = await done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });
+  // Material solo si la respuesta salió del modelo (no si se bloqueó y quedó la de respaldo).
+  if (fallback) return result;
+  const attachments = [...(ctx.attachments ?? [])];
+  if (ctx.foundLots?.length && !attachments.some((a) => a.kind === "carousel")) {
+    const carousel = await lotCarousel(input.db, input.tenant.id, ctx.foundLots).catch(() => null);
+    if (carousel) attachments.unshift(carousel);
+  }
+  return { ...result, attachments };
 }
 
 /** Quita las preguntas que ofrecen un asesor ("¿Quieres que un asesor te contacte?", "¿Te gustaría que te llame un asesor?"). */

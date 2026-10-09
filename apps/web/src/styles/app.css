@@ -1082,6 +1082,42 @@ textarea {
   background: #d9fdd3;
 }
 
+.bubble__media {
+  margin: 0;
+}
+
+.bubble__media img,
+.bubble__carousel img {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 8px;
+}
+
+.bubble__media figcaption {
+  margin-top: 4px;
+}
+
+.bubble__doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.05);
+  color: inherit;
+}
+
+.bubble__carousel {
+  display: grid;
+  gap: 6px;
+}
+
+.bubble__carousel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .bubble__meta {
   display: block;
   margin-top: 2px;

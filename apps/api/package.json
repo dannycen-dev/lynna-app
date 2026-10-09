@@ -30,6 +30,7 @@
     "secrets:prod": "XDG_CONFIG_HOME=$HOME/.wrangler-cuentas/ignia wrangler secret bulk .dev.vars.prod --env prod",
     "user:create": "node scripts/create-user.mjs",
     "wa:account": "node scripts/wa-account.mjs",
+    "wa:templates": "node scripts/wa-templates.mjs",
     "demo:users": "bash scripts/demo-users.sh",
     "eval:agent": "node scripts/eval-agent.mjs",
     "demo:crm": "node scripts/demo-crm.mjs",
@@ -38,6 +39,7 @@
   "dependencies": {
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.13",
+    "pdf-lib": "1.17.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {

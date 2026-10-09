@@ -25,7 +25,8 @@ const tenantId = () =>
     .references(() => tenants.id);
 
 /** Un paso de la secuencia de seguimiento: cuántas horas de silencio esperar y qué decir. */
-export type FollowupStep = { afterHours: number; text: string };
+/** Paso de seguimiento. Dentro de las 24 h se manda `text`; fuera, la plantilla aprobada `template` (si no hay, el paso se salta). */
+export type FollowupStep = { afterHours: number; text: string; template?: string };
 
 /** Horario de atención de los asesores: tramos por día (0 = domingo), en minutos desde la medianoche. */
 export type BusinessHours = { weekday: number; startMinute: number; endMinute: number }[];
@@ -51,6 +52,10 @@ export const tenants = sqliteTable("tenants", {
   // Privacidad (LFPDPPP): enlace al aviso de privacidad y texto corto que se manda en el primer mensaje.
   privacyNoticeUrl: text("privacy_notice_url"),
   privacyNoticeText: text("privacy_notice_text"),
+  // Marca para cotizaciones en PDF y material: logo en R2 y colores en hex ("#1B3A6B").
+  logoR2Key: text("logo_r2_key"),
+  brandPrimary: text("brand_primary"),
+  brandAccent: text("brand_accent"),
   createdAt: createdAt(),
 });
 
@@ -128,7 +133,8 @@ export const lotMedia = sqliteTable("lot_media", {
     .notNull()
     .references(() => developments.id),
   lotId: text("lot_id").references(() => lots.id),
-  kind: text("kind", { enum: ["photo", "plan", "brochure"] }).notNull(),
+  // quote = cotización en PDF generada para un prospecto (no aparece en la galería del desarrollo).
+  kind: text("kind", { enum: ["photo", "plan", "brochure", "quote"] }).notNull(),
   r2Key: text("r2_key").notNull(),
   mime: text("mime").notNull(),
   caption: text("caption"),

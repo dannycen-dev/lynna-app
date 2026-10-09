@@ -1,9 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { CatalogError, getLot, plansForDevelopment, searchAvailableLots, simulateForLot } from "../catalog/service";
 import type { Db } from "../db/client";
 import { bookAppointment, freeSlots, localParts, localToEpoch, parseTime, sellersForProspect, setAppointmentStatus, slotLabel, upcomingAppointment } from "../crm/agenda";
-import { developments, lots, notifications, paymentPlans, prospects, tenants } from "../db/schema";
+import { developments, lotMedia, lots, messages, notifications, paymentPlans, prospects, tenants } from "../db/schema";
 import { todayIn, type Breakdown } from "../financing";
 
 type PaymentPlan = typeof paymentPlans.$inferSelect;
@@ -69,7 +69,22 @@ export type ToolContext = {
   financialPending?: boolean;
   /** Cuándo contactará un asesor según el horario de atención ("en breve", "mañana a partir de las 9:00"). */
   advisorEta?: string;
+  /** Material que la IA pidió mandar (fotos, plano, ubicación); se envía después del texto. */
+  attachments?: Attachment[];
+  /** Lotes que devolvió buscar_lotes en este turno (para el carrusel). */
+  foundLots?: (typeof lots.$inferSelect)[];
 };
+
+/** Lo que enviar_material agrega a la respuesta. Las imágenes y PDF son de lot_media (R2, URL pública /media/:id). */
+export type Attachment =
+  | { kind: "image" | "document"; mediaId: string; mime: string; caption: string | null; filename?: string }
+  | { kind: "location"; latitude: number; longitude: number; name: string; address: string | null }
+  | { kind: "carousel"; body: string; cards: { mediaId: string; text: string; buttons: { reply: string; title: string }[] }[] }
+  /** Cotización en PDF con tabla de pagos; se genera al enviarla (src/docs/quote-pdf.ts). */
+  | { kind: "quote"; lotId: string; planId: string };
+
+/** Máximo de fotos por envío: más saturan el chat. */
+export const MAX_PHOTOS_PER_SEND = 4;
 
 const pesos = (cents: number) => Math.round(cents / 100);
 const fmt = (cents: number) => `$${pesos(cents).toLocaleString("en-US")} MXN`;
@@ -221,6 +236,22 @@ export const TOOL_SPECS: ToolSpec[] = [
     },
   },
   {
+    name: "enviar_material",
+    description:
+      "Manda por WhatsApp fotos, el plano o la ubicación (pin en el mapa) de un desarrollo o de un lote. Úsala cuando pida ver fotos, imágenes, el plano, el masterplan, cómo llegar o la ubicación. Después solo di brevemente qué le enviaste.",
+    parameters: {
+      type: "object",
+      properties: {
+        tipo: { type: "string", enum: ["fotos", "plano", "ubicacion"] },
+        desarrollo: { type: "string", description: "Nombre del desarrollo (opcional si solo hay uno)." },
+        lote_id: { type: "string", description: "Para fotos de un lote específico (de buscar_lotes)." },
+        manzana: { type: "string" },
+        lote: { type: "string" },
+      },
+      required: ["tipo"],
+    },
+  },
+  {
     name: "escalar_a_asesor",
     description:
       "Turna la conversación a un asesor humano. Obligatorio si quiere comprar, apartar, pagar, ver el contrato, escriturar, pide descuento, temas legales o de pagos, queja, o quiere enviar documentos.",
@@ -302,6 +333,7 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
         facts.lots.add(`${l.block}-${l.number}`.toUpperCase());
         remember(facts, l.totalPriceCents, l.pricePerM2Cents);
       }
+      ctx.foundLots = [...(ctx.foundLots ?? []).filter((l) => !found.some((f) => f.id === l.id)), ...found];
       if (found.length === 0) return { lotes: [], mensaje: "No hay lotes disponibles con esos criterios." };
       return {
         lotes: found.map((l) => ({
@@ -384,7 +416,16 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
         b.salePriceCents + b.totalInterestCents,
         sim.lot.pricePerM2Cents,
       );
-      return { lote: lotLabel(sim.lot), plan: sim.plan.name, ...summarizeBreakdown(b) };
+      // La cotización completa (tabla de pagos) va en PDF; solo una por lote y plan en este turno.
+      if (!(ctx.attachments ?? []).some((a) => a.kind === "quote" && a.lotId === sim.lot.id && a.planId === sim.plan.id)) {
+        ctx.attachments = [...(ctx.attachments ?? []), { kind: "quote", lotId: sim.lot.id, planId: sim.plan.id }];
+      }
+      return {
+        lote: lotLabel(sim.lot),
+        plan: sim.plan.name,
+        ...summarizeBreakdown(b),
+        nota: "Se le enviará además la cotización en PDF con la tabla de pagos completa; menciónalo en una frase.",
+      };
     }
 
     case "actualizar_prospecto": {
@@ -539,6 +580,14 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
       };
     }
 
+    case "enviar_material":
+      return sendMaterial(ctx, str(args.tipo), {
+        desarrollo: str(args.desarrollo),
+        loteId: str(args.lote_id),
+        manzana: str(args.manzana),
+        lote: str(args.lote) ?? (num(args.lote) !== undefined ? String(num(args.lote)) : undefined),
+      });
+
     case "escalar_a_asesor": {
       const reason = (ESCALATION_REASONS as readonly string[]).includes(String(args.motivo)) ? (args.motivo as EscalationReason) : "otro";
       const detail = (str(args.detalle) ?? "").slice(0, 500);
@@ -549,6 +598,107 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
+}
+
+async function sendMaterial(
+  ctx: ToolContext,
+  tipo: string | undefined,
+  target: { desarrollo?: string; loteId?: string; manzana?: string; lote?: string },
+): Promise<unknown> {
+  const { db, tenantId } = ctx;
+  if (tipo !== "fotos" && tipo !== "plano" && tipo !== "ubicacion") return { error: "tipo debe ser fotos, plano o ubicacion." };
+
+  let lot: typeof lots.$inferSelect | undefined;
+  if (target.loteId) lot = await getLot(db, tenantId, target.loteId);
+  else if (target.manzana && target.lote) {
+    lot = await db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.tenantId, tenantId), eq(lots.block, target.manzana.toUpperCase()), eq(lots.number, target.lote)))
+      .get();
+  }
+  const { match, all } = lot ? { match: await db.select().from(developments).where(eq(developments.id, lot.developmentId)).get(), all: [] } : await findDevelopment(db, tenantId, target.desarrollo);
+  if (!match) return { error: "¿De qué desarrollo?", desarrollos: all.map((d) => d.name) };
+
+  if (tipo === "ubicacion") {
+    if (match.lat == null || match.lng == null) return { error: "No hay ubicación cargada. Da la dirección si la tienes y ofrece que un asesor la comparta." };
+    ctx.attachments = [...(ctx.attachments ?? []), { kind: "location", latitude: match.lat, longitude: match.lng, name: match.name, address: match.address }];
+    return { ok: true, enviado: `ubicación de ${match.name}` };
+  }
+
+  // Lo ya enviado en esta conversación no se repite.
+  const alreadySent = new Set(
+    (
+      await db
+        .select({ mediaId: messages.mediaId })
+        .from(messages)
+        .where(and(eq(messages.conversationId, ctx.conversationId), eq(messages.direction, "out"), isNotNull(messages.mediaId)))
+    ).map((m) => m.mediaId),
+  );
+  const queued = new Set((ctx.attachments ?? []).flatMap((a) => (a.kind === "image" || a.kind === "document" ? [a.mediaId] : [])));
+  const kinds = tipo === "plano" ? (["plan"] as const) : (["photo"] as const);
+  const scope = lot ? or(eq(lotMedia.lotId, lot.id), isNull(lotMedia.lotId)) : isNull(lotMedia.lotId);
+  const rows = await db
+    .select()
+    .from(lotMedia)
+    .where(and(eq(lotMedia.tenantId, tenantId), eq(lotMedia.developmentId, match.id), inArray(lotMedia.kind, [...kinds]), scope))
+    .orderBy(asc(lotMedia.sort));
+  // Primero las del lote (si se pidió uno), luego las generales del desarrollo.
+  rows.sort((a, b) => Number(Boolean(b.lotId)) - Number(Boolean(a.lotId)));
+  const fresh = rows.filter((r) => !alreadySent.has(r.id) && !queued.has(r.id)).slice(0, tipo === "plano" ? 1 : MAX_PHOTOS_PER_SEND);
+
+  if (rows.length === 0) return { error: `No hay ${tipo === "plano" ? "plano" : "fotos"} cargados de ${match.name}. Ofrece que un asesor se los comparta.` };
+  if (fresh.length === 0) return { ok: true, nota: `Ya le enviaste ${tipo === "plano" ? "el plano" : "todas las fotos disponibles"} en esta conversación; no las vuelvas a mandar.` };
+
+  for (const r of fresh) {
+    const isPdf = r.mime === "application/pdf";
+    ctx.attachments = [
+      ...(ctx.attachments ?? []),
+      {
+        kind: isPdf ? "document" : "image",
+        mediaId: r.id,
+        mime: r.mime,
+        caption: r.caption,
+        ...(isPdf ? { filename: `${tipo === "plano" ? "Plano" : "Material"} ${match.name}.pdf` } : {}),
+      },
+    ];
+  }
+  if (lot) ctx.facts.lots.add(`${lot.block}-${lot.number}`.toUpperCase());
+  return { ok: true, enviados: fresh.length, de: lot ? `${lotLabel(lot)} de ${match.name}` : match.name, nota: "Ya se enviarán después de tu mensaje. Di en una frase qué le mandaste; no describas las imágenes." };
+}
+
+/**
+ * Carrusel de los lotes que encontró buscar_lotes: una tarjeta por lote con foto (la del lote o, si no
+ * tiene, una del desarrollo), medidas y precio, y botones para pedir el detalle o agendar visita.
+ * Sin fotos cargadas no hay carrusel (WhatsApp exige imagen en cada tarjeta).
+ */
+export async function lotCarousel(db: Db, tenantId: string, found: (typeof lots.$inferSelect)[]): Promise<Attachment | null> {
+  const unique = found.filter((l, i) => found.findIndex((x) => x.id === l.id) === i).slice(0, 10);
+  if (unique.length < 2) return null;
+  const devIds = [...new Set(unique.map((l) => l.developmentId))];
+  const photos = await db
+    .select()
+    .from(lotMedia)
+    .where(and(eq(lotMedia.tenantId, tenantId), inArray(lotMedia.developmentId, devIds), eq(lotMedia.kind, "photo")))
+    .orderBy(asc(lotMedia.sort));
+  const images = photos.filter((p) => p.mime !== "application/pdf");
+  if (images.length === 0) return null;
+  const general = (devId: string) => images.filter((p) => p.developmentId === devId && !p.lotId);
+  const cards = unique.map((l, i) => {
+    const own = images.find((p) => p.lotId === l.id);
+    const pool = general(l.developmentId);
+    const photo = own ?? pool[i % Math.max(pool.length, 1)] ?? images[i % images.length]!;
+    const key = `${l.block}-${l.number}`;
+    return {
+      mediaId: photo.id,
+      text: `*${lotLabel(l)}*\n${l.areaM2} m²${l.frontM && l.depthM ? ` (${l.frontM} x ${l.depthM} m)` : ""} · ${fmt(l.totalPriceCents)}`,
+      buttons: [
+        { title: "Ver detalle", reply: `Quiero ver el detalle del lote ${key}` },
+        { title: "Agendar visita", reply: `Quiero agendar una visita para ver el lote ${key}` },
+      ],
+    };
+  });
+  return { kind: "carousel", body: "Desliza para ver los lotes 👉", cards };
 }
 
 async function loadTenant(db: Db, tenantId: string) {
