@@ -23,8 +23,6 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
       /\bver (el )?contrato\b/,
       /\b(puedo|podria) pagar (hoy|ya|ahorita)\b/,
       /\bque (necesito|se necesita|requisitos?) para escriturar\b/,
-      // escritura(s), escriturar, escrituración, escriturado…
-      /\bescritur\w*/,
       /\bcerrar (el )?trato\b/,
     ],
   },
@@ -43,7 +41,11 @@ const RULES: { reason: EscalationReason; patterns: RegExp[] }[] = [
       /\bfactura\b/,
     ],
   },
-  { reason: "legal", patterns: [/\babogado\b/, /\blegal(es|mente)?\b/, /\bdemanda\b/, /\bejido\b/, /\bregimen de propiedad\b/] },
+  {
+    reason: "legal",
+    // Escrituras (fechas, entrega, si ya está escriturado): tema legal; "qué necesito para escriturar" es compra (arriba).
+    patterns: [/\babogado\b/, /\blegal(es|mente)?\b/, /\bdemanda\b/, /\bejido\b/, /\bregimen de propiedad\b/, /\bescritur\w*/],
+  },
   { reason: "queja", patterns: [/\bqueja\b/, /\b(fraude|estafa)\b/, /\bpesimo\b/, /\bmolest[oa]\b/, /\bprofeco\b/] },
   {
     // Pide hablar con una persona: se le da, aunque no sea un tema de los que el cliente pidió turnar.
@@ -88,3 +90,19 @@ export function claimsMaterialSent(reply: string): boolean {
   const t = strip(reply);
   return /\b(te (envio|mando|comparto|acabo de (enviar|mandar|compartir))|aqui (tienes|te dejo)|ya te (envie|mande|comparti))\b[^.?!]{0,60}\b(fotos?|imagen(es)?|plano|ubicacion|mapa|pin|material)\b/.test(t);
 }
+
+// Muletillas con las que la gente abre una ráfaga ("oye", "hola", "una pregunta") antes de escribir lo que quiere.
+const FILLER = /^(oye|oiga|hola|holi|buenas|buen dia|buenos dias|buenas tardes|buenas noches|que tal|una pregunta|una duda|tengo una duda|disculpa|disculpe|mira|fijate|este|ey|hey|hi|ola)( (oye|una pregunta|una duda|disculpa))?$/;
+
+/** ¿El mensaje es solo una muletilla de apertura? (para esperar a que llegue la pregunta de verdad) */
+export function isFiller(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return FILLER.test(strip(text).replace(/[¡!¿?.,;:]/g, "").replace(/\s+/g, " ").trim());
+}
+
+/** "te transfiero", "ya deposité", "¿a qué cuenta pago?", "te mando el dinero"… */
+export function mentionsMoneyTransfer(text: string): boolean {
+  const t = strip(text);
+  return /\b(transfier\w*|transferencia|deposit\w*|deposito|spei|cuenta bancaria|numero de cuenta|clabe|mando el dinero|te pago|les pago|a que cuenta)\b/.test(t);
+}
+

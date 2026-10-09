@@ -5,20 +5,23 @@ import { conversations, MESSAGE_STATUS_RANK, messages, prospects, waAccounts } f
 import { log } from "../lib/log";
 import { respondToConversation } from "../agent/respond";
 import { isWithinServiceWindow, sendText } from "../whatsapp/client";
+import { isFiller } from "../agent/intent";
 
 // Tope para que una ráfaga larga no retrase la respuesta indefinidamente.
 const MAX_BURST_MS = 15_000;
+// Si hasta ahora solo llegaron muletillas ("oye", "hola", "una pregunta"), se espera más a que llegue la pregunta.
+const FILLER_DEBOUNCE_MS = 7_000;
 const PHASE0_ACK =
   "¡Gracias por escribirnos! Recibimos tu mensaje y en breve te atendemos. (Lynna — entorno de pruebas)";
 
-export type InboundNotice = { conversationId: string; messageId: string };
+export type InboundNotice = { conversationId: string; messageId: string; text?: string | null };
 
 /**
  * Una instancia por conversación (prospecto + número). Serializa los mensajes del mismo
  * prospecto y agrupa ráfagas antes de responder. En la Fase 3 aquí se conecta el agente de IA.
  */
 export class ConversationDO extends DurableObject<Env> {
-  async notifyInbound({ conversationId, messageId }: InboundNotice): Promise<void> {
+  async notifyInbound({ conversationId, messageId, text }: InboundNotice): Promise<void> {
     const seenKey = `seen:${messageId}`;
     if (await this.ctx.storage.get(seenKey)) return;
 
@@ -26,22 +29,24 @@ export class ConversationDO extends DurableObject<Env> {
     const now = Date.now();
     const burstStart = (await this.ctx.storage.get<number>("burstStart")) ?? now;
 
+    const onlyFillers = ((await this.ctx.storage.get<boolean>("onlyFillers")) ?? true) && isFiller(text);
     await this.ctx.storage.put({
       [seenKey]: true,
       conversationId,
       pending: [...pending, messageId],
       burstStart,
+      onlyFillers,
     });
 
-    // Debounce deslizante con tope.
-    const debounce = Number(this.env.DEBOUNCE_MS) || 3000;
+    // Debounce deslizante con tope; más largo mientras la ráfaga sea solo muletillas.
+    const debounce = onlyFillers ? FILLER_DEBOUNCE_MS : Number(this.env.DEBOUNCE_MS) || 3000;
     await this.ctx.storage.setAlarm(Math.min(now + debounce, burstStart + MAX_BURST_MS));
   }
 
   override async alarm(): Promise<void> {
     const pending = (await this.ctx.storage.get<string[]>("pending")) ?? [];
     const conversationId = await this.ctx.storage.get<string>("conversationId");
-    await this.ctx.storage.delete(["pending", "burstStart"]);
+    await this.ctx.storage.delete(["pending", "burstStart", "onlyFillers"]);
     if (!conversationId || pending.length === 0) return;
 
     await this.respond(conversationId, pending);

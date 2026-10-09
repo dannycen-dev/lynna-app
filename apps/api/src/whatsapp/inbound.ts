@@ -93,7 +93,7 @@ async function processMessage(ev: InboundMessageEvent, env: Env): Promise<void> 
   // Se avisa al DO aunque el mensaje ya existiera: si un intento previo falló justo aquí,
   // el reintento lo completa. El DO descarta los IDs que ya vio.
   const stub = env.CONVERSATION.get(env.CONVERSATION.idFromName(conversation!.id));
-  await stub.notifyInbound({ conversationId: conversation!.id, messageId });
+  await stub.notifyInbound({ conversationId: conversation!.id, messageId, text: ev.text ?? null });
 }
 
 async function processStatus(ev: StatusEvent, env: Env): Promise<void> {

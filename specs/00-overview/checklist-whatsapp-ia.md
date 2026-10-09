@@ -321,3 +321,5 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
   - [x] ARCO desde el panel: exportar (JSON) y eliminar todos los datos de un prospecto (gerente/dueño; queda constancia sin datos personales). — _2026-10-07, dev_
   - [ ] Regla: solo IA que no entrene con los datos (Workers AI, incluidos modelos chinos alojados en Cloudflare, o Claude); nunca APIs directas de DeepSeek/Kimi.
 - [x] Medir el consumo de IA por cliente para facturarlo al costo: página **Consumo** (mes; Ignia ve todas, dueño/gerente la suya): respuestas de la IA, neuronas y su costo (USD 0.011/1,000), estimación de WhatsApp (plantillas + respuestas después de 1,000). Excluye el simulador. — _2026-10-07, dev_
+
+- [x] **Correcciones tras pruebas reales (2026-10-09, dev):** consentimiento con "Sí." + más texto; ráfagas que empiezan con muletilla ("oye", "hola") esperan hasta 7 s la pregunta; escrituras → "tema legal"; aviso de seguridad de pagos (solo cuentas a nombre de la desarrolladora) cuando el prospecto habla de transferir o depositar; una contraoferta no se guarda como presupuesto. Eval 22/22.

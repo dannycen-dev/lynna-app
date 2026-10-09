@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractAmounts, extractLots, validateReply } from "../src/agent/guard";
 import { extractProspectData, looksLikeProspectData } from "../src/agent/extract";
-import { claimsMaterialSent, detectEscalation, isOptOut, requestedMaterial } from "../src/agent/intent";
+import { claimsMaterialSent, detectEscalation, isFiller, isOptOut, mentionsMoneyTransfer, requestedMaterial } from "../src/agent/intent";
 import { normalizeCompletion, withFallback, type LlmClient } from "../src/agent/llm";
 import { computeScore, temperature } from "../src/agent/qualification";
 import { toWhatsAppFormat } from "../src/agent/respond";
@@ -68,8 +68,8 @@ describe("red de seguridad de intención (frases del cliente)", () => {
     "'%s' → compra",
     (text) => expect(detectEscalation(text)).toBe("compra"),
   );
-  it.each(["¿Cuándo me entregan las escrituras?", "¿y la escritura cuándo?", "¿ya está escriturado?"])("'%s' → compra (escrituración)", (text) =>
-    expect(detectEscalation(text)).toBe("compra"),
+  it.each(["¿Cuándo me entregan las escrituras?", "¿y la escritura cuándo?", "¿ya está escriturado?"])("'%s' → legal (escrituración)", (text) =>
+    expect(detectEscalation(text)).toBe("legal"),
   );
   it.each(["¿Me lo apartas ya?", "apártamelo porfa", "¿lo aparto hoy?"])("'%s' → compra (apartado)", (text) => expect(detectEscalation(text)).toBe("compra"));
   it.each(["te transfiero ahorita", "les deposito mañana", "hago la transferencia hoy"])("'%s' → pago", (text) =>
@@ -237,5 +237,19 @@ describe("nombres de la desarrolladora en el validador", () => {
     const clean = withoutNames(text, ["Inmobiliaria Lote 321", "Sendero 321 Residencial"]);
     expect(clean).not.toMatch(/321/);
     expect(validateReply(clean, { lots: new Set(), amounts: new Set(), times: new Set(), dates: new Set(), booked: false, cancelled: false, existing: false, financialConsent: false }).ok).toBe(true);
+  });
+});
+
+describe("muletillas de apertura", () => {
+  it("espera la pregunta si solo dijo 'oye' o 'hola'", () => {
+    for (const f of ["oye", "Oye!", "Hola", "buenas noches", "una pregunta", "Disculpa"]) expect(isFiller(f), f).toBe(true);
+    for (const q of ["¿aceptan mascotas?", "Hola, ¿qué lotes tienen?", "info", "precio?", null]) expect(isFiller(q), String(q)).toBe(false);
+  });
+});
+
+describe("aviso de seguridad de pagos", () => {
+  it("detecta cuando habla de transferir o depositar", () => {
+    for (const t of ["ahorita te transfiero el apartado", "Ya deposité", "¿a qué cuenta pago?", "pásame la CLABE"]) expect(mentionsMoneyTransfer(t), t).toBe(true);
+    for (const t of ["¿cuánto es el enganche?", "quiero ver fotos"]) expect(mentionsMoneyTransfer(t), t).toBe(false);
   });
 });

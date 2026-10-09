@@ -46,14 +46,27 @@ const YES_WORDS = "si|claro|claro que si|acepto|autorizo|de acuerdo|ok|okay|va|v
 const YES = new RegExp(`^(${YES_WORDS})( (${YES_WORDS}))*$`);
 const NO = /^(no|nel|prefiero que no|no gracias|no acepto|no autorizo|no por ahora|mejor no)( (gracias|por ahora|por el momento))*$/;
 
-/** "Sí", "sí, acepto", "claro, adelante"… */
-export function isAffirmative(text: string): boolean {
-  return YES.test(clean(text));
+/**
+ * Primera frase de la respuesta cuando va separada del resto por un signo ("Sí. Me gusta el lote C-2",
+ * "No, gracias. ¿Y el plano?"). Sin signo no hay frase aparte: "Si tengo 500 mil…" es un "si" condicional.
+ */
+function leadingClause(text: string): string | null {
+  const m = /^\s*([^.!\n,;]{1,40})[.!\n,;]\s*\S/.exec(text);
+  return m ? m[1]! : null;
 }
 
-/** "No", "no, gracias", "prefiero que no"… */
+/** "Sí", "sí, acepto", "claro, adelante", "Sí. Me gusta el lote…" */
+export function isAffirmative(text: string): boolean {
+  if (YES.test(clean(text))) return true;
+  const lead = leadingClause(text);
+  return lead !== null && YES.test(clean(lead));
+}
+
+/** "No", "no, gracias", "prefiero que no", "No. ¿Y el plano?" */
 export function isNegative(text: string): boolean {
-  return NO.test(clean(text));
+  if (NO.test(clean(text))) return true;
+  const lead = leadingClause(text);
+  return lead !== null && NO.test(clean(lead));
 }
 
 /** ¿El prospecto está compartiendo datos financieros (presupuesto, enganche, montos)? */

@@ -78,6 +78,10 @@ describe("privacidad: detección", () => {
     for (const no of ["Si tengo 500 mil, ¿qué me alcanza?", "si me interesa el lote 3", "sí pero primero dime el precio", "no"]) expect(isAffirmative(no), no).toBe(false);
     for (const no of ["No", "no, gracias", "prefiero que no", "No por ahora"]) expect(isNegative(no), no).toBe(true);
     expect(isNegative("no sé todavía cuánto tengo")).toBe(false);
+    // "Sí." al inicio, separado por un signo, cuenta aunque siga más texto (caso real en WhatsApp).
+    for (const yes of ["Sí. Me gusta el de la manzana C lote 2", "Si, me interesa el C-2", "Claro! y mándame el plano", "Sí\nquiero ver fotos"]) expect(isAffirmative(yes), yes).toBe(true);
+    for (const no of ["No. ¿Y el plano?", "No, gracias. Solo quiero ver precios"]) expect(isNegative(no), no).toBe(true);
+    expect(isAffirmative("Si me lo dejas en 500 mil lo compro")).toBe(false);
   });
 
   it("reconoce cuando el prospecto comparte datos financieros", () => {

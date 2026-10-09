@@ -7,6 +7,7 @@ import { deliverAttachments } from "../whatsapp/outbound";
 import { fakeLlm } from "./fake-llm";
 import { withFallback, workersAiClient, type LlmClient } from "./llm";
 import { extractProspectData, looksLikeProspectData } from "./extract";
+import { detectEscalation } from "./intent";
 import { PROMPT_VERSION } from "./prompt";
 import { runAgent, type AgentResult } from "./runner";
 import { newFacts, runTool } from "./tools";
@@ -179,7 +180,9 @@ export async function respondToConversation(
   // prospecto sí dio, una llamada corta y dedicada los extrae y actualiza la calificación.
   const incomingText = incoming.map((m) => m.body ?? "").join("\n");
   const savedByModel = result.toolTrace.some((t) => t.name === "actualizar_prospecto");
-  if (!result.deterministic && !savedByModel && looksLikeProspectData(incomingText)) {
+  // Una contraoferta ("si me lo dejas en 500 mil") no es su presupuesto: no se extrae.
+  const counteroffer = detectEscalation(incomingText) === "descuento";
+  if (!result.deterministic && !savedByModel && !counteroffer && looksLikeProspectData(incomingText)) {
     const work = (async () => {
       const { data, neurons } = await extractProspectData(llm, incomingText);
       if (Object.keys(data).length === 0) return;

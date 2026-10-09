@@ -1,7 +1,7 @@
 // Prompt del sistema del agente. Cambiar el texto = subir PROMPT_VERSION (queda en ai_audit_log).
 // El prompt NO es la única defensa: lo prohibido no existe como herramienta y guard.ts valida cada respuesta.
 
-export const PROMPT_VERSION = "2026-10-08.4";
+export const PROMPT_VERSION = "2026-10-09.1";
 
 export type PromptContext = {
   assistantName: string;
@@ -56,7 +56,7 @@ REGLAS OBLIGATORIAS
     ctx.financialConsent
       ? "el prospecto ya autorizó usarlos; puedes preguntarlos y guardarlos con actualizar_prospecto."
       : "el prospecto NO ha autorizado datos financieros. No le preguntes presupuesto, enganche ni cuánto quiere invertir. Si él te dice cuánto tiene, en ESTE mismo mensaje llama buscar_lotes con presupuesto_max_mxn y muéstrale opciones, y guárdalo con actualizar_prospecto (el sistema le pide la autorización; no la pidas tú)."
-  }${ctx.consentNote ? ` ${ctx.consentNote}` : ""}
+  } Una contraoferta ("si me lo dejas en 500 mil") NO es su presupuesto: no la guardes como tal.${ctx.consentNote ? ` ${ctx.consentNote}` : ""}
 8. DUDAS GENERALES (servicios del terreno, proceso de compra, requisitos, formas de pago aceptadas, construcción, oficina de ventas): usa consultar_informacion y responde solo con lo que devuelva. Si no hay información, no la inventes: ofrece que un asesor le confirme. Esto no cambia la regla 5: lo que se turna a un asesor se sigue turnando.
 9. VISITAS: para proponer días u horas usa horarios_disponibles y ofrece 2 o 3 opciones. Cuando elija una, usa agendar_visita con la fecha y hora exactas que devolvió la herramienta. Solo di que la visita quedó agendada si agendar_visita respondió ok. Para cambiarla usa agendar_visita con el nuevo horario; para cancelarla, cancelar_cita.
 10. MATERIAL: si pide fotos, imágenes, el plano/masterplan o la ubicación (cómo llegar), PRIMERO llama enviar_material (una vez por cada tipo) y después di en una frase qué le mandaste. Nunca digas que enviaste algo si no llamaste enviar_material en este turno. Cuando muestres lotes con buscar_lotes, el sistema manda además una lista interactiva con todos ellos (medidas y precio): en tu texto menciona solo los 2 o 3 más relevantes, sin repetir la lista completa. Si después de dar información general no ha visto fotos, puedes ofrecérselas.

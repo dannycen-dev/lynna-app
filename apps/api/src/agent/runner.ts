@@ -7,7 +7,7 @@ import { todayIn } from "../financing";
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { extractAmounts, validateReply } from "./guard";
-import { claimsMaterialSent, detectEscalation, isOptOut, requestedMaterial } from "./intent";
+import { claimsMaterialSent, detectEscalation, isOptOut, mentionsMoneyTransfer, requestedMaterial } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
 import { buildSystemPrompt, fallbackReply, mediaReply, OPT_OUT_REPLY } from "./prompt";
 import { advisorEta } from "../crm/business-hours";
@@ -298,6 +298,10 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     reply = withoutAdvisorOffer(reply);
     if (!/asesor/i.test(reply)) reply = `${reply}\n\nUn asesor te contactará ${eta} para ayudarte con eso.`.trim();
   }
+  // Seguridad del cliente: si habla de transferir o depositar, el sistema recuerda a qué cuentas pagar.
+  if (mentionsMoneyTransfer(incomingText) && !/cuentas? (oficial|a nombre)/i.test(reply)) {
+    reply = `${reply}\n\n${paymentSafetyNote(tenantRow?.name ?? input.tenant.name)}`;
+  }
 
   const result = await done({ reply, draft: drafts.length ? drafts.join("\n\n--- reintento ---\n\n") : null, toolTrace, blocked: [...new Set(blocked)], fallback, deterministic: false, neurons, modelsUsed: [...modelsUsed] });
   // Material solo si la respuesta salió del modelo (no si se bloqueó y quedó la de respaldo).
@@ -373,3 +377,8 @@ export function withoutNames(text: string, names: (string | null | undefined)[])
   }
   return out;
 }
+
+/** Recordatorio de seguridad cuando el prospecto habla de transferir o depositar dinero. */
+export const paymentSafetyNote = (company: string) =>
+  `🔐 Por tu seguridad, haz pagos solo a cuentas a nombre de ${company} que te confirme tu asesor; nunca a cuentas personales.`;
+
