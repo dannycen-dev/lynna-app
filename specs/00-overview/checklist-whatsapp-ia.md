@@ -134,7 +134,7 @@
 
 ### 2.13 WhatsApp Business por la API oficial
 - [x] Cloud API de Meta (sin intermediarios no oficiales).
-- [ ] Alta de cuenta por cliente: WABA, número, token de usuario del sistema, app secret, verify token — guardados **cifrados** (AES-GCM, llave en Secrets Store).
+- [ ] Alta de cuenta por cliente: WABA, número, token de usuario del sistema, app secret, verify token — guardados **cifrados** (AES-GCM, llave en Secrets Store). — _2026-10-08: por ahora un solo juego global en secretos del Worker (dev) + fila en `wa_accounts` con `pnpm --filter @lynna/api wa:account`; falta el cifrado por desarrolladora_
 - [ ] Sincronización de plantillas aprobadas desde Meta.
 - [ ] Guía de onboarding: verificación de negocio, método de pago en la WABA, migración del número existente (conservar el PIN de dos pasos).
 - [ ] Lección del Lynna original: Meta rechaza "WhatsApp" en nombres de app/usuario del sistema; el alta de números por API está reservada a socios (se hace en el administrador).
@@ -233,7 +233,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 ## 7. Demo para el cliente (antes de contratar)
 
 - [ ] Desarrollo ficticio con 30–50 lotes, planos y fotos.
-- [ ] Número de WhatsApp de demo conectado (número real, no el de pruebas de Meta).
+- [x] Número de WhatsApp de demo conectado (número real, no el de pruebas de Meta). — _2026-10-08, dev: +52 990 229 8507 (nombre visible "Lynna"), app Meta "Lynna ERP" (portfolio unozero.dev, WABA 1885748865433904) **publicada**; probado de punta a punta: "Hola" → respuesta de la IA en ~9 s, entregada y leída_
 - [ ] Guion: consulta general → lotes por presupuesto → plano → simulación de mensualidades → calificación → agendar visita → "quiero comprar" → notificación al vendedor en el CRM.
 - [ ] Mostrar en vivo los guardrails: pedir descuento, pedir apartar, preguntar fecha de escrituración.
 - [ ] Mostrar cómo el vendedor toma la conversación.
@@ -302,7 +302,7 @@ Meta ──POST──▶ Worker /whatsapp/webhook ──(firma OK, dedupe)──
 - [ ] Agenda: sincronizar con Google Calendar del vendedor (opcional; requiere OAuth de Google por vendedor).
 
 ### Al final: WhatsApp real (Fase 2)
-- [ ] Credenciales de Meta (app secret, access token, phone_number_id) en dev/stg/prod.
+- [ ] Credenciales de Meta (app secret, access token, phone_number_id) en dev/stg/prod. — _2026-10-08: dev listo (token permanente del usuario del sistema "Lynna ERP API", app secret, verify token; webhook `https://devlynna.igniastudio.mx/whatsapp/webhook`). stg/prod pendientes_
 - [ ] Envío de fotos, planos (PDF) y ubicación; plantillas aprobadas; aviso de privacidad al primer contacto.
 - [ ] Envío real de seguimientos y recordatorios de cita; aviso al vendedor por WhatsApp.
 
