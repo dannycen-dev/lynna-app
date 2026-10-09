@@ -198,8 +198,9 @@ describe("simulador (HTTP, modelo falso)", () => {
     expect(second.escalation).toBe("compra");
     expect(second.prospect.stage).toBe("ready_to_buy");
 
-    const history = (await (await exports.default.fetch(BASE, { headers: auth })).json()) as { messages: { direction: string; status: string }[]; audit: unknown[] };
-    expect(history.messages.map((m) => m.direction)).toEqual(["in", "out", "in", "out"]);
+    const history = (await (await exports.default.fetch(BASE, { headers: auth })).json()) as { messages: { direction: string; status: string; type: string }[]; audit: unknown[] };
+    // Al buscar lotes, después del texto va la lista interactiva de lotes.
+    expect(history.messages.map((m) => `${m.direction}:${m.type}`)).toEqual(["in:text", "out:text", "out:list", "in:text", "out:text"]);
     expect(history.messages.filter((m) => m.direction === "out").every((m) => m.status === "simulated")).toBe(true);
     expect(history.audit).toHaveLength(2);
 

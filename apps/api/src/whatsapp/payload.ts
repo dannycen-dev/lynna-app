@@ -95,7 +95,7 @@ export function extractEvents(payload: z.infer<typeof webhookPayload>): InboundE
         const mediaPart = m.image ?? m.document ?? m.audio ?? m.video;
         // Botones de Lynna: el id trae la frase completa ("lynna:Quiero agendar una visita al lote C-2"),
         // así la IA recibe el contexto que no cabe en los 20 caracteres del título.
-        const fromButton = [m.interactive?.button_reply?.id, m.button?.payload].find((id) => id?.startsWith(REPLY_ID_PREFIX));
+        const fromButton = [m.interactive?.button_reply?.id, m.interactive?.list_reply?.id, m.button?.payload].find((id) => id?.startsWith(REPLY_ID_PREFIX));
         const text =
           (fromButton ? fromButton.slice(REPLY_ID_PREFIX.length) : undefined) ??
           m.text?.body ??

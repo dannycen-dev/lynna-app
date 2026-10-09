@@ -96,6 +96,7 @@ export async function respondToConversation(
     prospect,
     history: history.map((m) => ({ direction: m.direction, body: m.body, type: m.type })),
     incoming: incoming.map((m) => ({ type: m.type, body: m.body })),
+    lotCards: env.LOT_CARDS === "carousel" ? "carousel" : "list",
   });
   const result = { ...agentResult, reply: toWhatsAppFormat(agentResult.reply) };
 

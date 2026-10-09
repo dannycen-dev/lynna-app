@@ -99,7 +99,7 @@ describe("CRM", () => {
     expect((await laura.call(`/prospects/${id}/notes`, "POST", { body: "Le interesa la Manzana C." })).status).toBe(201);
 
     const ficha = await laura.json(`/prospects/${id}`);
-    expect(ficha.messages.map((m: { direction: string }) => m.direction)).toEqual(["in", "out"]);
+    expect(ficha.messages.map((m: { direction: string; type: string }) => `${m.direction}:${m.type}`)).toEqual(["in:text", "out:text", "out:list"]);
     expect(ficha.notes[0]).toMatchObject({ body: "Le interesa la Manzana C.", authorName: "Laura González" });
     expect(ficha.history[0]).toMatchObject({ action: "stage_change", actorName: "Laura González", data: { from: "new", to: "negotiation", reason: "Pidió segunda visita" } });
     expect(ficha.lastAi).toMatchObject({ model: "fake" });

@@ -91,8 +91,25 @@ const SCENARIOS = [
   {
     // "Mascotas" está en borrador: la IA no lo ve y no debe inventar la respuesta.
     id: "sin-dato",
-    messages: ["¿Se permiten mascotas en el fraccionamiento?"],
-    checks: [NOT(/\bs[ií],? (se )?(permit|pued)|\bcorrea\b/i, "inventa o usa un texto en borrador"), (r) => /asesor/i.test(r.reply) || "no ofreció que un asesor confirme"],
+    // Dato que no está en la base de conocimiento aprobada: no se inventa.
+    messages: ["¿El fraccionamiento tiene gimnasio?"],
+    checks: [NOT(/\b(s[ií],? (cuenta|tiene|hay)|contamos con (un )?gimnasio|gimnasio equipado)\b/i, "inventa un dato"), (r) => /asesor/i.test(r.reply) || "no ofreció que un asesor confirme"],
+  },
+  // Español informal y cortante (como escribe mucha gente en WhatsApp): actuar, no preguntar ni disculparse.
+  {
+    id: "informal-dispo",
+    messages: ["Esta disponible"],
+    checks: [NO_FALLBACK, TOOL("buscar_lotes")],
+  },
+  {
+    id: "informal-fotos",
+    messages: ["Mandame imagenes"],
+    checks: [NO_FALLBACK, TOOL("enviar_material")],
+  },
+  {
+    id: "informal-ntiendes",
+    messages: ["Dame info del desarrollo", "Ntiends azi?"],
+    checks: [NO_FALLBACK, NOT(/\b(disculpa|perd[oó]n|lo siento)\b/i, "se disculpó sin motivo")],
   },
   // Agenda: requiere horarios de citas configurados (pnpm demo:crm los carga en dev/stg).
   {

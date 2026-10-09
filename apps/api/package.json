@@ -31,6 +31,7 @@
     "user:create": "node scripts/create-user.mjs",
     "wa:account": "node scripts/wa-account.mjs",
     "wa:templates": "node scripts/wa-templates.mjs",
+    "material:upload": "node scripts/upload-material.mjs",
     "demo:users": "bash scripts/demo-users.sh",
     "eval:agent": "node scripts/eval-agent.mjs",
     "demo:crm": "node scripts/demo-crm.mjs",

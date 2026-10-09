@@ -1,9 +1,9 @@
-import { FileText, GalleryHorizontal, MapPin } from "lucide-react";
+import { FileText, GalleryHorizontal, List as ListIcon, MapPin } from "lucide-react";
 import type { Message } from "../lib/types";
 
 /**
- * Contenido de un mensaje de WhatsApp tal como lo vio el prospecto: texto, foto, PDF, ubicación o carrusel
- * de lotes. Lo que manda Lynna se sirve desde /media/:id; lo que manda el prospecto (INE, comprobantes)
+ * Contenido de un mensaje de WhatsApp tal como lo vio el prospecto: texto, foto, PDF, ubicación o lista /
+ * carrusel de lotes. Lo que manda Lynna se sirve desde /media/:id; lo que manda el prospecto (INE, comprobantes)
  * no se muestra aquí por privacidad.
  */
 export function MessageContent({ m }: { m: Message }) {
@@ -55,12 +55,14 @@ export function MessageContent({ m }: { m: Message }) {
         </>
       );
     }
-    case "carousel": {
+    case "carousel":
+    case "list": {
       const [title, ...cards] = (m.body ?? "").split("\n");
+      const Icon = m.type === "list" ? ListIcon : GalleryHorizontal;
       return (
         <div className="bubble__carousel">
           <span className="bubble__doc">
-            <GalleryHorizontal size={18} aria-hidden /> <span>{title || "Carrusel"} · {cards.length / 2} lotes</span>
+            <Icon size={18} aria-hidden /> <span>{title || "Lotes"} · {cards.length / 2} lotes</span>
           </span>
           {own && <img src={`/media/${m.mediaId}`} alt="" loading="lazy" />}
           <ul>
@@ -71,6 +73,21 @@ export function MessageContent({ m }: { m: Message }) {
             ))}
           </ul>
         </div>
+      );
+    }
+    case "buttons": {
+      const [body, ...buttons] = (m.body ?? "").split("\n");
+      return (
+        <>
+          {body}
+          <span className="bubble__buttons">
+            {buttons.map((b) => (
+              <span key={b} className="chip">
+                {b}
+              </span>
+            ))}
+          </span>
+        </>
       );
     }
     case "text":

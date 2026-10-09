@@ -144,3 +144,33 @@ export function sendButtons(cfg: ClientConfig, phoneNumberId: string, to: string
     },
   });
 }
+
+export type ListRow = { id: string; title: string; description?: string };
+
+/**
+ * Lista interactiva (botón que despliega hasta 10 opciones). A diferencia del carrusel, se ve en todos los
+ * clientes de WhatsApp (celular, Web y Desktop).
+ */
+export function sendList(
+  cfg: ClientConfig,
+  phoneNumberId: string,
+  to: string,
+  list: { body: string; button: string; sectionTitle: string; rows: ListRow[] },
+) {
+  return send(cfg, phoneNumberId, to, {
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: list.body.slice(0, 1024) },
+      action: {
+        button: list.button.slice(0, 20),
+        sections: [
+          {
+            title: list.sectionTitle.slice(0, 24),
+            rows: list.rows.slice(0, 10).map((r) => ({ id: r.id.slice(0, 200), title: r.title.slice(0, 24), ...(r.description ? { description: r.description.slice(0, 72) } : {}) })),
+          },
+        ],
+      },
+    },
+  });
+}

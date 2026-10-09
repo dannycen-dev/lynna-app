@@ -80,6 +80,10 @@ export type Attachment =
   | { kind: "image" | "document"; mediaId: string; mime: string; caption: string | null; filename?: string }
   | { kind: "location"; latitude: number; longitude: number; name: string; address: string | null }
   | { kind: "carousel"; body: string; cards: { mediaId: string; text: string; buttons: { reply: string; title: string }[] }[] }
+  /** Botones de respuesta rápida (hasta 3) para guiar el siguiente paso. */
+  | { kind: "buttons"; body: string; buttons: { title: string; reply: string }[] }
+  /** Lista interactiva de lotes (universal) con una foto del desarrollo antes, si aún no ha visto fotos. */
+  | { kind: "lot_list"; heroMediaId: string | null; heroCaption: string | null; body: string; rows: { title: string; description: string; reply: string }[] }
   /** Cotización en PDF con tabla de pagos; se genera al enviarla (src/docs/quote-pdf.ts). */
   | { kind: "quote"; lotId: string; planId: string };
 
@@ -424,7 +428,7 @@ async function dispatch(ctx: ToolContext, name: string, args: Record<string, unk
         lote: lotLabel(sim.lot),
         plan: sim.plan.name,
         ...summarizeBreakdown(b),
-        nota: "Se le enviará además la cotización en PDF con la tabla de pagos completa; menciónalo en una frase.",
+        nota: "El sistema le envía AHORA MISMO, junto con tu mensaje, la cotización en PDF con la tabla de pagos completa. Dilo así: \"Te envío la cotización en PDF con la tabla de pagos completa\". No digas que un asesor se la enviará.",
       };
     }
 
@@ -649,7 +653,9 @@ async function sendMaterial(
   const fresh = rows.filter((r) => !alreadySent.has(r.id) && !queued.has(r.id)).slice(0, tipo === "plano" ? 1 : MAX_PHOTOS_PER_SEND);
 
   if (rows.length === 0) return { error: `No hay ${tipo === "plano" ? "plano" : "fotos"} cargados de ${match.name}. Ofrece que un asesor se los comparta.` };
-  if (fresh.length === 0) return { ok: true, nota: `Ya le enviaste ${tipo === "plano" ? "el plano" : "todas las fotos disponibles"} en esta conversación; no las vuelvas a mandar.` };
+  // Si ya las vio todas y las vuelve a pedir ("no me llegaron", "mándame imágenes"), se reenvían.
+  if (fresh.length === 0) fresh.push(...rows.filter((r) => !queued.has(r.id)).slice(0, tipo === "plano" ? 1 : MAX_PHOTOS_PER_SEND));
+  if (fresh.length === 0) return { ok: true, nota: "Ese material ya va en este mensaje." };
 
   for (const r of fresh) {
     const isPdf = r.mime === "application/pdf";
@@ -700,6 +706,42 @@ export async function lotCarousel(db: Db, tenantId: string, found: (typeof lots.
     };
   });
   return { kind: "carousel", body: "Desliza para ver los lotes 👉", cards };
+}
+
+/** Cómo se muestran los lotes encontrados: lista (se ve en todos los clientes) o carrusel (solo celular). */
+export type LotCards = "list" | "carousel";
+
+/**
+ * Lista interactiva de los lotes que encontró buscar_lotes: un renglón por lote (medidas y precio) que al
+ * tocarlo pide el detalle. Si el prospecto aún no ha visto fotos, antes va una del desarrollo.
+ */
+export async function lotList(db: Db, tenantId: string, conversationId: string, found: (typeof lots.$inferSelect)[]): Promise<Attachment | null> {
+  const unique = found.filter((l, i) => found.findIndex((x) => x.id === l.id) === i).slice(0, 10);
+  if (unique.length < 2) return null;
+  const sentImage = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.direction, "out"), eq(messages.type, "image")))
+    .limit(1);
+  const [hero] = sentImage.length
+    ? []
+    : await db
+        .select()
+        .from(lotMedia)
+        .where(and(eq(lotMedia.tenantId, tenantId), eq(lotMedia.developmentId, unique[0]!.developmentId), eq(lotMedia.kind, "photo"), isNull(lotMedia.lotId)))
+        .orderBy(asc(lotMedia.sort))
+        .limit(1);
+  return {
+    kind: "lot_list",
+    heroMediaId: hero?.id ?? null,
+    heroCaption: hero?.caption ?? null,
+    body: `Estos son ${unique.length} lotes disponibles. Toca "Ver lotes" y elige uno para ver su detalle 👇`,
+    rows: unique.map((l) => ({
+      title: lotLabel(l).replace("Manzana", "Mz."),
+      description: `${l.areaM2} m²${l.frontM && l.depthM ? ` (${l.frontM} x ${l.depthM} m)` : ""} · ${fmt(l.totalPriceCents)}${l.features ? ` · ${l.features}` : ""}`,
+      reply: `Quiero ver el detalle del lote ${l.block}-${l.number}`,
+    })),
+  };
 }
 
 async function loadTenant(db: Db, tenantId: string) {

@@ -30,6 +30,9 @@
     "ENVIRONMENT": "local",
     // URL pública del entorno: Meta descarga de aquí las fotos y planos (/media/:id) que manda Lynna.
     "PUBLIC_URL": "http://localhost:8787",
+    // Cómo se muestran los lotes encontrados: "list" (lista interactiva, se ve en celular, Web y Desktop)
+    // o "carousel" (tarjetas con foto; WhatsApp Desktop y algunas versiones de Web no lo muestran).
+    "LOT_CARDS": "list",
     "WHATSAPP_GRAPH_VERSION": "v23.0",
     // Ventana para agrupar ráfagas de mensajes del mismo prospecto antes de responder.
     "DEBOUNCE_MS": "3000",
@@ -91,9 +94,11 @@
       "name": "lynna-api-dev",
       "workers_dev": false,
       "routes": [{ "pattern": "devlynna.igniastudio.mx", "custom_domain": true }],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "lynna-media-dev" }],
       "vars": {
         "ENVIRONMENT": "dev",
         "PUBLIC_URL": "https://devlynna.igniastudio.mx",
+        "LOT_CARDS": "list",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "ai",
@@ -140,6 +145,7 @@
       "vars": {
         "ENVIRONMENT": "stg",
         "PUBLIC_URL": "https://stglynna.igniastudio.mx",
+        "LOT_CARDS": "list",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "ai",
@@ -185,6 +191,7 @@
       "vars": {
         "ENVIRONMENT": "prod",
         "PUBLIC_URL": "https://lynna.igniastudio.mx",
+        "LOT_CARDS": "list",
         "WHATSAPP_GRAPH_VERSION": "v23.0",
         "DEBOUNCE_MS": "3000",
         "AUTO_REPLY_MODE": "off",

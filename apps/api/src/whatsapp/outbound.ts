@@ -6,7 +6,7 @@ import { simulateForLot } from "../catalog/service";
 import { buildQuotePdf } from "../docs/quote-pdf";
 import { todayIn } from "../financing";
 import { log } from "../lib/log";
-import { replyId, sendCarousel, sendLocation, sendMedia } from "./client";
+import { replyId, sendButtons, sendCarousel, sendList, sendLocation, sendMedia } from "./client";
 
 // Envío del material que acompaña una respuesta (fotos, plano, ubicación, carrusel de lotes). Cada pieza
 // queda como mensaje en la conversación para que el CRM muestre exactamente lo que vio el prospecto.
@@ -83,6 +83,13 @@ export async function makeQuote(t: Pick<Target, "db" | "env" | "tenantId" | "pro
 
 export const mediaUrl = (env: Env, mediaId: string) => `${env.PUBLIC_URL.replace(/\/$/, "")}/media/${mediaId}`;
 
+/** Texto con que se guarda una lista o carrusel de lotes (también sirve para no repetirlos). */
+export function lotCardsBody(a: Attachment): string | null {
+  if (a.kind === "carousel") return [a.body, ...a.cards.map((c) => c.text.replace(/\*/g, ""))].join("\n");
+  if (a.kind === "lot_list") return [a.body, ...a.rows.flatMap((r) => [r.title, r.description])].join("\n");
+  return null;
+}
+
 /** Cómo se guarda cada pieza en messages (tipo, texto visible en el CRM y archivo). */
 function describe(a: Ready): { type: string; body: string | null; mediaId: string | null; mediaMime: string | null } {
   switch (a.kind) {
@@ -92,12 +99,11 @@ function describe(a: Ready): { type: string; body: string | null; mediaId: strin
     case "location":
       return { type: "location", body: [a.name, a.address, `${a.latitude},${a.longitude}`].filter(Boolean).join(" · "), mediaId: null, mediaMime: null };
     case "carousel":
-      return {
-        type: "carousel",
-        body: [a.body, ...a.cards.map((c) => c.text.replace(/\*/g, ""))].join("\n"),
-        mediaId: a.cards[0]?.mediaId ?? null,
-        mediaMime: null,
-      };
+      return { type: "carousel", body: lotCardsBody(a), mediaId: a.cards[0]?.mediaId ?? null, mediaMime: null };
+    case "lot_list":
+      return { type: "list", body: lotCardsBody(a), mediaId: a.heroMediaId, mediaMime: null };
+    case "buttons":
+      return { type: "buttons", body: [a.body, ...a.buttons.map((b) => b.title)].join("\n"), mediaId: null, mediaMime: null };
   }
 }
 
@@ -125,6 +131,18 @@ async function sendOne(t: Target, a: Ready): Promise<string> {
             text: c.text,
             buttons: c.buttons.map((b) => ({ id: replyId(b.reply), title: b.title })),
           })),
+        })
+      ).wamid;
+    case "buttons":
+      return (await sendButtons(cfg, t.phoneNumberId, t.to, { body: a.body, buttons: a.buttons.map((b) => ({ id: replyId(b.reply), title: b.title })) })).wamid;
+    case "lot_list":
+      if (a.heroMediaId) await sendMedia(cfg, t.phoneNumberId, t.to, { type: "image", link: mediaUrl(t.env, a.heroMediaId), caption: a.heroCaption });
+      return (
+        await sendList(cfg, t.phoneNumberId, t.to, {
+          body: a.body,
+          button: "Ver lotes",
+          sectionTitle: "Lotes disponibles",
+          rows: a.rows.map((r) => ({ id: replyId(r.reply), title: r.title, description: r.description })),
         })
       ).wamid;
   }

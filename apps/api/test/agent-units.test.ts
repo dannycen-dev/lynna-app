@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractAmounts, extractLots, validateReply } from "../src/agent/guard";
 import { extractProspectData, looksLikeProspectData } from "../src/agent/extract";
-import { detectEscalation, isOptOut } from "../src/agent/intent";
+import { claimsMaterialSent, detectEscalation, isOptOut, requestedMaterial } from "../src/agent/intent";
 import { normalizeCompletion, withFallback, type LlmClient } from "../src/agent/llm";
 import { computeScore, temperature } from "../src/agent/qualification";
 import { toWhatsAppFormat } from "../src/agent/respond";
@@ -198,5 +198,44 @@ describe("extracción de datos del prospecto", () => {
     expect(await extractProspectData(broken, "...")).toEqual({ data: {}, neurons: 0 });
     const noJson: LlmClient = { model: "x", complete: async () => ({ content: "no sé", toolCalls: [], neurons: 1 }) };
     expect((await extractProspectData(noJson, "...")).data).toEqual({});
+  });
+});
+
+describe("material pedido y material prometido", () => {
+  it.each([
+    ["Me gustaría ver fotos del desarrollo y el plano", ["fotos", "plano"]],
+    ["¿Cómo llego? mándame la ubicación", ["ubicacion"]],
+    ["¿Dónde está el desarrollo?", ["ubicacion"]],
+    ["¿Tienen imágenes de la casa club?", ["fotos"]],
+    ["¿Cuánto cuesta el lote C-2?", []],
+  ])("%s", (text, expected) => {
+    expect(requestedMaterial(text)).toEqual(expected);
+  });
+
+  it("detecta cuando la respuesta dice que ya envió material", () => {
+    expect(claimsMaterialSent("Te acabo de mandar las fotos del desarrollo y el plano maestro.")).toBe(true);
+    expect(claimsMaterialSent("¡Claro! Te envío la ubicación para que llegues fácil.")).toBe(true);
+    expect(claimsMaterialSent("¿Te gustaría que te envíe las fotos del desarrollo?")).toBe(false);
+    expect(claimsMaterialSent("El lote mide 200 m² y cuesta $570,000 MXN.")).toBe(false);
+  });
+});
+
+describe("tokens internos del modelo", () => {
+  it("se quitan antes de mandar el mensaje", async () => {
+    const { stripModelTokens } = await import("../src/agent/runner");
+    expect(stripModelTokens("<channel|>¡Listo! Te envío la ubicación.")).toBe("¡Listo! Te envío la ubicación.");
+    expect(stripModelTokens("Hola<end_of_turn>")).toBe("Hola");
+    expect(stripModelTokens("<|im_start|>assistant\nHola")).toBe("assistant\nHola");
+    expect(stripModelTokens("Precio desde $570,000 MXN (lote <200 m²)")).toBe("Precio desde $570,000 MXN (lote <200 m²)");
+  });
+});
+
+describe("nombres de la desarrolladora en el validador", () => {
+  it('"Inmobiliaria Lote 321" y "Sendero 321" no cuentan como el lote 321', async () => {
+    const { withoutNames } = await import("../src/agent/runner");
+    const text = "Inmobiliaria Lote 321 no recibe efectivo. En Sendero 321 Residencial pagas por transferencia.";
+    const clean = withoutNames(text, ["Inmobiliaria Lote 321", "Sendero 321 Residencial"]);
+    expect(clean).not.toMatch(/321/);
+    expect(validateReply(clean, { lots: new Set(), amounts: new Set(), times: new Set(), dates: new Set(), booked: false, cancelled: false, existing: false, financialConsent: false }).ok).toBe(true);
   });
 });

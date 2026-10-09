@@ -70,3 +70,21 @@ export function isOptOut(text: string): boolean {
   const t = strip(text);
   return OPT_OUT.some((p) => p.test(t));
 }
+
+export type MaterialRequest = "fotos" | "plano" | "ubicacion";
+
+/** Qué material pidió el prospecto ("mándame fotos", "¿tienes el plano?", "¿cómo llego?"). */
+export function requestedMaterial(text: string): MaterialRequest[] {
+  const t = strip(text);
+  const out: MaterialRequest[] = [];
+  if (/\b(fotos?|imagen(es)?|renders?|como (se ve|es el desarrollo|luce))\b/.test(t)) out.push("fotos");
+  if (/\b(plano|planos|masterplan|plano maestro|lotificacion)\b/.test(t)) out.push("plano");
+  if (/\b(ubicacion|como llego|como llegar|mapa|pin|google maps|donde (esta|queda|se ubica))\b/.test(t)) out.push("ubicacion");
+  return out;
+}
+
+/** La respuesta dice que ya se envió material ("te envío las fotos", "te acabo de mandar el plano"). */
+export function claimsMaterialSent(reply: string): boolean {
+  const t = strip(reply);
+  return /\b(te (envio|mando|comparto|acabo de (enviar|mandar|compartir))|aqui (tienes|te dejo)|ya te (envie|mande|comparti))\b[^.?!]{0,60}\b(fotos?|imagen(es)?|plano|ubicacion|mapa|pin|material)\b/.test(t);
+}

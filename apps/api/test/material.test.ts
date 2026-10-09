@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { PDFDocument } from "pdf-lib";
 import { beforeEach, describe, expect, it } from "vitest";
-import { lotCarousel, newFacts, runTool, type ToolContext } from "../src/agent/tools";
+import { lotCarousel, lotList, newFacts, runTool, type ToolContext } from "../src/agent/tools";
 import { getDb } from "../src/db/client";
 import { buildQuotePdf } from "../src/docs/quote-pdf";
 import { simulatePlan } from "../src/financing";
@@ -97,16 +97,43 @@ describe("carrusel de lotes", () => {
   });
 });
 
+describe("lista de lotes (universal)", () => {
+  it("un renglón por lote con medidas y precio, y una foto del desarrollo si aún no ha visto fotos", async () => {
+    await media("g1", "photo");
+    const lots = (await env.DB.prepare("SELECT * FROM lots WHERE status = 'available' ORDER BY total_price_cents LIMIT 12").all()).results.map((l) => ({
+      id: l.id,
+      developmentId: l.development_id,
+      block: l.block,
+      number: l.number,
+      areaM2: l.area_m2,
+      frontM: l.front_m,
+      depthM: l.depth_m,
+      totalPriceCents: l.total_price_cents,
+      features: l.features,
+    })) as never;
+    const list = await lotList(getDb(env.DB), "tnt-demo", "c1", lots);
+    expect(list?.kind).toBe("lot_list");
+    if (list?.kind !== "lot_list") return;
+    expect(list.heroMediaId).toBe("g1");
+    expect(list.rows).toHaveLength(10); // WhatsApp admite 10 renglones
+    expect(list.rows[0]!.title).toMatch(/^Mz\. [A-D], lote \d+$/);
+    expect(list.rows[0]!.title.length).toBeLessThanOrEqual(24);
+    expect(list.rows[0]!.description).toMatch(/^\d+ m² .*\$[\d,]+ MXN/);
+    expect(list.rows[0]!.reply).toMatch(/^Quiero ver el detalle del lote [A-D]-\d+$/);
+  });
+});
+
 describe("botones de respuesta", () => {
   it("el id lynna:… se convierte en lo que dijo el prospecto", () => {
     const payload = metaPayload({
       messages: [
         { from: PROSPECT_PHONE, id: "w.b1", timestamp: "1", type: "interactive", interactive: { type: "button_reply", button_reply: { id: "lynna:Quiero agendar una visita para ver el lote B-12", title: "Agendar visita" } } },
         { from: PROSPECT_PHONE, id: "w.b2", timestamp: "2", type: "button", button: { text: "Ya no, gracias", payload: "lynna:Ya no me escriban, gracias" } },
+        { from: PROSPECT_PHONE, id: "w.b3", timestamp: "3", type: "interactive", interactive: { type: "list_reply", list_reply: { id: "lynna:Quiero ver el detalle del lote C-11", title: "Mz. C, lote 11" } } },
       ],
     });
     const events = extractEvents(webhookPayload.parse(payload));
-    expect(events.map((e) => (e.kind === "message" ? e.text : null))).toEqual(["Quiero agendar una visita para ver el lote B-12", "Ya no me escriban, gracias"]);
+    expect(events.map((e) => (e.kind === "message" ? e.text : null))).toEqual(["Quiero agendar una visita para ver el lote B-12", "Ya no me escriban, gracias", "Quiero ver el detalle del lote C-11"]);
   });
 });
 

@@ -1,0 +1,11 @@
+{
+  "logo": "logo-lote321.png",
+  "items": [
+    { "file": "acceso.jpg", "kind": "photo", "caption": "Pórtico de acceso con vigilancia 24/7 · Sendero 321 (imagen ilustrativa)" },
+    { "file": "casa-club.jpg", "kind": "photo", "caption": "Casa club con alberca y palapa · Sendero 321 (imagen ilustrativa)" },
+    { "file": "areas-verdes.jpg", "kind": "photo", "caption": "Parque lineal con ciclovía · Sendero 321 (imagen ilustrativa)" },
+    { "file": "vista-aerea.jpg", "kind": "photo", "caption": "Vista aérea de los lotes urbanizados · Sendero 321 (imagen ilustrativa)" },
+    { "file": "lote.jpg", "kind": "photo", "caption": "Lote urbanizado con servicios · Sendero 321 (imagen ilustrativa)" },
+    { "file": "plano-maestro.pdf", "kind": "plan", "caption": "Plano maestro · Sendero 321 Residencial" }
+  ]
+}

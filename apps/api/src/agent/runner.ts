@@ -1,18 +1,19 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { lotCardsBody } from "../whatsapp/outbound";
 import type { Db } from "../db/client";
 import { slotLabel, upcomingAppointment } from "../crm/agenda";
-import { developments, prospects, tenants } from "../db/schema";
+import { developments, messages, prospects, tenants } from "../db/schema";
 import { todayIn } from "../financing";
 import { auditInsert } from "../lib/audit";
 import { log } from "../lib/log";
 import { extractAmounts, validateReply } from "./guard";
-import { detectEscalation, isOptOut } from "./intent";
+import { claimsMaterialSent, detectEscalation, isOptOut, requestedMaterial } from "./intent";
 import type { ChatMessage, LlmClient } from "./llm";
 import { buildSystemPrompt, fallbackReply, mediaReply, OPT_OUT_REPLY } from "./prompt";
 import { advisorEta } from "../crm/business-hours";
 import { officeClosedDates } from "../crm/time-off";
 import { CONSENT_QUESTION, isAffirmative, isNegative, mentionsFinancialData, privacyNotice, recordConsent } from "../privacy/consent";
-import { escalate, lotCarousel, newFacts, rememberSlot, runTool, TOOL_SPECS, type Attachment, type EscalationReason, type ToolContext } from "./tools";
+import { escalate, lotCarousel, lotList, newFacts, rememberSlot, runTool, TOOL_SPECS, type Attachment, type EscalationReason, type LotCards, type ToolContext } from "./tools";
 
 const MAX_TOOL_ROUNDS = 5;
 const HISTORY_LIMIT = 16;
@@ -30,6 +31,8 @@ export type AgentInput = {
   history: HistoryMessage[];
   /** Mensajes del prospecto que disparan esta respuesta. */
   incoming: { type: string; body: string | null }[];
+  /** Cómo mostrar los lotes encontrados (por omisión, lista: se ve en todos los clientes de WhatsApp). */
+  lotCards?: LotCards;
 };
 
 export type ToolTrace = { name: string; args: Record<string, unknown>; result: string };
@@ -199,7 +202,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
       modelsUsed.add(completion.model ?? input.llm.model);
       if (completion.toolCalls.length === 0) {
         truncated = Boolean(completion.truncated);
-        const text = completion.content?.trim() || null;
+        const text = stripModelTokens(completion.content ?? "") || null;
         if (!text) log("warn", "agent.empty_completion", { conversationId: input.conversationId, model: input.llm.model, round, raw: completion.raw });
         return text;
       }
@@ -227,7 +230,11 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   try {
     /** Un texto cortado por límite de tokens nunca se envía. */
     const validate = (text: string | null) =>
-      !text ? ({ ok: false, reasons: ["respuesta vacía"] } as const) : truncated ? ({ ok: false, reasons: ["respuesta incompleta (límite de tokens)"] } as const) : validateReply(text, ctx.facts);
+      !text
+        ? ({ ok: false, reasons: ["respuesta vacía"] } as const)
+        : truncated
+          ? ({ ok: false, reasons: ["respuesta incompleta (límite de tokens)"] } as const)
+          : validateReply(withoutNames(text, [tenantRow?.name ?? input.tenant.name, ...devs.map((d) => d.name)]), ctx.facts);
 
     draft = await converse();
     if (draft) drafts.push(draft);
@@ -266,7 +273,21 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
     await escalate(ctx, "otro", `Respuesta de la IA no disponible o bloqueada: ${blocked.join("; ") || "sin texto"}.`);
   }
 
-  // 3. Red de seguridad: lo que el cliente pidió turnar a un humano se turna aunque el modelo no lo haya hecho.
+  // 3. Red de seguridad del material: si pidió fotos, plano o ubicación y el modelo no llamó enviar_material,
+  //    lo llama el sistema; y la respuesta nunca dice que se envió algo que no va adjunto.
+  if (!fallback) {
+    for (const tipo of requestedMaterial(incomingText)) {
+      if (toolTrace.some((t) => t.name === "enviar_material" && t.args.tipo === tipo)) continue;
+      const result = await runTool(ctx, "enviar_material", { tipo });
+      toolTrace.push({ name: "enviar_material", args: { tipo, red_de_seguridad: true }, result });
+    }
+    if (claimsMaterialSent(reply) && !(ctx.attachments ?? []).some((a) => a.kind !== "quote" && a.kind !== "carousel")) {
+      blocked.push("dijo que envió material que no se adjuntó");
+      reply = `${reply.split(/\n\n/).filter((p) => !claimsMaterialSent(p)).join("\n\n")}\n\nPor ahora no tengo ese material a la mano; un asesor te lo puede compartir.`.trim();
+    }
+  }
+
+  // 4. Red de seguridad: lo que el cliente pidió turnar a un humano se turna aunque el modelo no lo haya hecho.
   const detected = detectEscalation(incomingText);
   if (detected && !ctx.escalation) {
     await escalate(ctx, detected, `Detectado por reglas en: "${incomingText.slice(0, 200)}"`);
@@ -282,12 +303,33 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   // Material solo si la respuesta salió del modelo (no si se bloqueó y quedó la de respaldo).
   if (fallback) return result;
   const attachments = [...(ctx.attachments ?? [])];
-  if (ctx.foundLots?.length && !attachments.some((a) => a.kind === "carousel")) {
-    const carousel = await lotCarousel(input.db, input.tenant.id, ctx.foundLots).catch(() => null);
-    if (carousel) attachments.unshift(carousel);
+  // El carrusel es para mostrar opciones. Si en este turno se habló de un lote concreto (detalle, cotización,
+  // cita), la búsqueda fue solo para encontrarlo: no se manda. Tampoco se repite el mismo carrusel.
+  const focusedOnOneLot = toolTrace.some((t) => ["detalle_lote", "simular_plan", "agendar_visita"].includes(t.name));
+  if (ctx.foundLots?.length && !focusedOnOneLot) {
+    const cards =
+      input.lotCards === "carousel"
+        ? await lotCarousel(input.db, input.tenant.id, ctx.foundLots).catch(() => null)
+        : await lotList(input.db, input.tenant.id, input.conversationId, ctx.foundLots).catch(() => null);
+    if (cards && !(await cardsAlreadySent(input.db, input.conversationId, cards))) attachments.unshift(cards);
   }
+  // Después de fotos, plano o ubicación: botones para el siguiente paso de la venta (se ven en todos los clientes).
+  const sentMaterial = attachments.some((a) => a.kind === "image" || a.kind === "document" || a.kind === "location");
+  const showsLots = attachments.some((a) => a.kind === "lot_list" || a.kind === "carousel");
+  if (sentMaterial && !showsLots && !ctx.escalation && !prospect.handoffAt) attachments.push(NEXT_STEP_BUTTONS);
   return { ...result, attachments };
 }
+
+/** Siguiente paso de la venta tras mandar material. */
+export const NEXT_STEP_BUTTONS: Attachment = {
+  kind: "buttons",
+  body: "¿Qué te gustaría hacer ahora? 👇",
+  buttons: [
+    { title: "Ver lotes", reply: "Quiero ver los lotes disponibles con sus precios" },
+    { title: "Cotizar", reply: "Quiero una cotización con mensualidades" },
+    { title: "Agendar visita", reply: "Quiero agendar una visita al desarrollo" },
+  ],
+};
 
 /** Quita las preguntas que ofrecen un asesor ("¿Quieres que un asesor te contacte?", "¿Te gustaría que te llame un asesor?"). */
 export function withoutAdvisorOffer(reply: string) {
@@ -297,4 +339,37 @@ export function withoutAdvisorOffer(reply: string) {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+/** ¿Ya se mandó en esta conversación la misma lista o carrusel de lotes? */
+async function cardsAlreadySent(db: Db, conversationId: string, cards: Attachment): Promise<boolean> {
+  const body = lotCardsBody(cards);
+  if (!body) return false;
+  const previous = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), inArray(messages.type, ["carousel", "list"]), eq(messages.body, body)))
+    .limit(1);
+  return previous.length > 0;
+}
+
+/** Quita tokens internos del modelo que a veces se filtran al texto ("<channel|>", "<|im_end|>", "<end_of_turn>"). */
+export function stripModelTokens(text: string): string {
+  return text
+    .replace(/<\|?\/?(channel|im_start|im_end|start_of_turn|end_of_turn|eos|bos|think|thinking|tool_call|message|final|analysis|assistant|user|system)[^<>]{0,40}\|?>/gi, "")
+    .replace(/^\s*(final|analysis|commentary)\s*\n/i, "")
+    .trim();
+}
+
+/**
+ * Quita los nombres de la desarrolladora y de sus desarrollos antes de validar: "Inmobiliaria Lote 321" o
+ * "Sendero 321" no son el lote 321 ni un monto.
+ */
+export function withoutNames(text: string, names: (string | null | undefined)[]): string {
+  let out = text;
+  for (const name of names) {
+    if (!name || name.length < 4) continue;
+    out = out.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), " ");
+  }
+  return out;
 }
